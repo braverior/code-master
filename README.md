@@ -13,11 +13,15 @@ AI 驱动的代码生成与审查平台。通过对接 Claude Code CLI，实现�
 - **仓库分析** — 自动分析仓库技术栈、模块结构、代码风格
 - **飞书集成** — 飞书 OAuth 登录、Bot 通知、文档内容抓取
 - **项目协作** — 多项目、多成员、角色权限管理
-
+介绍页：
 <img width="2974" height="1542" alt="image" src="https://github.com/user-attachments/assets/bbd29163-14a7-462f-81dd-00225669740a" />
+看板页：
 <img width="2986" height="1534" alt="image" src="https://github.com/user-attachments/assets/97ab2323-3dd3-4919-be26-ee7426219ea6" />
+项目需求页面：
 <img width="2978" height="1522" alt="image" src="https://github.com/user-attachments/assets/6acb86dc-6034-4d15-a525-ebbc023d80bf" />
+AI Coding页面：
 <img width="2954" height="1514" alt="image" src="https://github.com/user-attachments/assets/802d95f3-b1b9-40bc-a073-6e0dbde282b9" />
+设置页面：
 <img width="2978" height="1544" alt="image" src="https://github.com/user-attachments/assets/6dec0f70-651c-4366-9bf1-a6524a60cb2d" />
 
 
