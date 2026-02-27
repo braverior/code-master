@@ -1,0 +1,46 @@
+server:
+  port: 30003
+  mode: debug  # debug / release
+
+database:
+  host: 127.0.0.1
+  port: 3306
+  user: root
+  password: "your-db-password"
+  dbname: code_master
+  charset: utf8mb4
+
+redis:
+  addr: 127.0.0.1:6379
+  password: ""
+  db: 0
+
+feishu:
+  app_id: "your-feishu-app-id"
+  app_secret: "your-feishu-app-secret"
+  redirect_uri: "http://localhost:30003/api/v1/auth/feishu/callback"
+  bot:
+    enabled: true
+    encrypt_key: ""
+    verification_token: ""
+
+ai_chat:
+  base_url: "https://bmc-llm-relay.bluemediagroup.cn/v1"
+  api_key: "your-ai-chat-api-key"
+  model: "gpt-5.2"
+  max_history: 20
+
+jwt:
+  secret: "your-jwt-secret-key"
+  expire_hours: 72
+
+codegen:
+  max_workers: 3
+  max_turns: 50
+  timeout_minutes: 10
+  work_dir: "/Users/huanglele/codes/code-master/work"
+  use_local_git: false  # true: 使用本地 git 凭证 push; false: 使用用户设置的 token push
+  #use_local_git: true  # true: 使用本地 git 凭证 push; false: 使用用户设置的 token push
+
+encrypt:
+  aes_key: "your-aes-encryption-key"

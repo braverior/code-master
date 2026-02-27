@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: codemaster-work
+  namespace: codemaster
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi       # Git clone working space; adjust per concurrent tasks
+  # storageClassName: ""  # Uncomment and set if using non-default StorageClass

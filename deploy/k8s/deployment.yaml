@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: codemaster
+  namespace: default
+  labels:
+    app: codemaster
+spec:
+  replicas: 1             # Single replica (codegen tasks use local work dir)
+  strategy:
+    type: Recreate        # Avoid two pods writing to same PVC
+  selector:
+    matchLabels:
+      app: codemaster
+  template:
+    metadata:
+      labels:
+        app: codemaster
+    spec:
+      containers:
+        - name: codemaster
+          image: code-master:latest       # Replace with your registry image
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+          env:
+            - name: CONFIG_PATH
+              value: /etc/codemaster/config.yaml
+            - name: GIT_TERMINAL_PROMPT
+              value: "0"
+          volumeMounts:
+            - name: config
+              mountPath: /etc/codemaster
+              readOnly: true
+          resources:
+            requests:
+              cpu: "100m"
+              memory: 128Mi
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /api/v1/auth/feishu/login
+              port: 80
+            initialDelaySeconds: 10
+            periodSeconds: 10
+      volumes:
+        - name: config
+          configMap:
+            name: codemaster-config
