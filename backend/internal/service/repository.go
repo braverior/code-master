@@ -163,8 +163,19 @@ func (s *RepositoryService) TriggerAnalysis(id uint, userID uint) error {
 		return fmt.Errorf("40003:分析任务正在进行中，请稍后")
 	}
 
-	gitToken := s.getUserGitToken(userID)
-	go s.analyzer.Analyze(context.Background(), repo, gitToken)
+	// Query user's LLM settings and git token
+	var gitToken, apiKey, baseURL, modelName string
+	if userID > 0 {
+		var setting model.UserSetting
+		if err := s.db.Where("user_id = ?", userID).First(&setting).Error; err == nil {
+			gitToken = setting.GitlabToken
+			apiKey = setting.APIKey
+			baseURL = setting.BaseURL
+			modelName = setting.Model
+		}
+	}
+
+	go s.analyzer.Analyze(context.Background(), repo, gitToken, apiKey, baseURL, modelName)
 	return nil
 }
 

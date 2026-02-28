@@ -20,6 +20,8 @@ func CreateBranch(ctx context.Context, repoDir, branchName string) error {
 }
 
 func Push(ctx context.Context, repoDir, branch, gitURL, token string, useLocalGit bool) error {
+	gitURL = rewriteGitURL(gitURL)
+
 	log.Printf("[gitops.Push] useLocalGit=%v, gitURL=%s, token_len=%d, branch=%s", useLocalGit, gitURL, len(token), branch)
 	env := append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
 

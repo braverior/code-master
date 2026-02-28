@@ -694,6 +694,7 @@ function RequirementsTab({ project }: { project: Project }) {
   const [newReq, setNewReq] = useState({ title: '', description: '', priority: 'p1', repository_id: '', assignee_id: '', deadline: getDefaultDeadline() });
   const [newDocLinks, setNewDocLinks] = useState<DocLink[]>([]);
   const [newDocResolving, setNewDocResolving] = useState<Record<number, boolean>>({});
+  const [newDocErrors, setNewDocErrors] = useState<Record<number, string>>({});
 
   const rdMembers = project.members || [];
 
@@ -726,7 +727,9 @@ function RequirementsTab({ project }: { project: Project }) {
       if (newReq.repository_id) data.repository_id = Number(newReq.repository_id);
       if (newReq.assignee_id) data.assignee_id = Number(newReq.assignee_id);
       if (newReq.deadline) data.deadline = new Date(newReq.deadline + 'T23:59:59').toISOString();
-      const validLinks = newDocLinks.filter((l) => l.url.trim() && l.title.trim());
+      const validLinks = newDocLinks
+        .filter((l) => l.url.trim())
+        .map((l) => ({ ...l, title: l.title.trim() || l.url.trim() }));
       if (validLinks.length > 0) data.doc_links = validLinks;
       await requirementApi.create(project.id, data);
       toast({ title: '需求创建成功', variant: 'success' });
@@ -872,6 +875,7 @@ function RequirementsTab({ project }: { project: Project }) {
                             const url = link.url.trim();
                             if (!url || link.title) return;
                             setNewDocResolving((prev) => ({ ...prev, [i]: true }));
+                            setNewDocErrors((prev) => { const next = { ...prev }; delete next[i]; return next; });
                             try {
                               const res = await feishuApi.resolveDoc(url);
                               setNewDocLinks((prev) => {
@@ -879,13 +883,22 @@ function RequirementsTab({ project }: { project: Project }) {
                                 if (updated[i]) updated[i] = { ...updated[i], title: res.title };
                                 return updated;
                               });
-                            } catch { /* ignore, user can still save with URL only */ }
+                            } catch (err) {
+                              const msg = (err as Error).message || '';
+                              if (msg.includes('forBidden') || msg.includes('forbidden') || msg.includes('权限')) {
+                                setNewDocErrors((prev) => ({ ...prev, [i]: '无权访问该文档，请在飞书中将文档设为「组织内链接可阅读」' }));
+                              } else {
+                                setNewDocErrors((prev) => ({ ...prev, [i]: '文档解析失败，保存后将使用链接作为标题' }));
+                              }
+                            }
                             finally { setNewDocResolving((prev) => ({ ...prev, [i]: false })); }
                           }} />
                         {newDocResolving[i] ? (
                           <div className="flex items-center gap-1 text-xs text-muted-foreground">
                             <Loader2 className="w-3 h-3 animate-spin" />解析中...
                           </div>
+                        ) : newDocErrors[i] ? (
+                          <p className="text-xs text-destructive">{newDocErrors[i]}</p>
                         ) : link.title ? (
                           <p className="text-xs text-muted-foreground truncate">{link.title}</p>
                         ) : null}
@@ -894,6 +907,7 @@ function RequirementsTab({ project }: { project: Project }) {
                         onClick={() => {
                           setNewDocLinks(newDocLinks.filter((_, idx) => idx !== i));
                           setNewDocResolving((prev) => { const next = { ...prev }; delete next[i]; return next; });
+                          setNewDocErrors((prev) => { const next = { ...prev }; delete next[i]; return next; });
                         }}>
                         <Trash2 className="w-4 h-4" />
                       </Button>

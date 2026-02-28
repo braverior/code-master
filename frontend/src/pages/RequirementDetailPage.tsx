@@ -69,6 +69,7 @@ export function RequirementDetailPage() {
   const [editData, setEditData] = useState({ title: '', description: '', priority: '', assignee_id: '', repository_id: '', deadline: '' });
   const [editDocLinks, setEditDocLinks] = useState<DocLink[]>([]);
   const [editDocResolving, setEditDocResolving] = useState<Record<number, boolean>>({});
+  const [editDocErrors, setEditDocErrors] = useState<Record<number, string>>({});
   const [editLoading, setEditLoading] = useState(false);
   const [members, setMembers] = useState<ProjectMember[]>([]);
   const [repos, setRepos] = useState<Repository[]>([]);
@@ -124,7 +125,9 @@ export function RequirementDetailPage() {
       if (editData.assignee_id) data.assignee_id = Number(editData.assignee_id);
       if (editData.repository_id) data.repository_id = Number(editData.repository_id);
       if (editData.deadline) data.deadline = new Date(editData.deadline + 'T23:59:59').toISOString();
-      const validLinks = editDocLinks.filter((l) => l.url.trim());
+      const validLinks = editDocLinks
+        .filter((l) => l.url.trim())
+        .map((l) => ({ ...l, title: l.title.trim() || l.url.trim() }));
       data.doc_links = validLinks;
       await requirementApi.update(req.id, data);
       toast({ title: '需求已更新', variant: 'success' });
@@ -562,6 +565,7 @@ export function RequirementDetailPage() {
                         const url = link.url.trim();
                         if (!url || link.title) return;
                         setEditDocResolving((prev) => ({ ...prev, [i]: true }));
+                        setEditDocErrors((prev) => { const next = { ...prev }; delete next[i]; return next; });
                         try {
                           const res = await feishuApi.resolveDoc(url);
                           setEditDocLinks((prev) => {
@@ -569,13 +573,22 @@ export function RequirementDetailPage() {
                             if (updated[i]) updated[i] = { ...updated[i], title: res.title };
                             return updated;
                           });
-                        } catch { /* ignore */ }
+                        } catch (err) {
+                          const msg = (err as Error).message || '';
+                          if (msg.includes('forBidden') || msg.includes('forbidden') || msg.includes('权限')) {
+                            setEditDocErrors((prev) => ({ ...prev, [i]: '无权访问该文档，请在飞书中将文档设为「组织内链接可阅读」' }));
+                          } else {
+                            setEditDocErrors((prev) => ({ ...prev, [i]: '文档解析失败，保存后将使用链接作为标题' }));
+                          }
+                        }
                         finally { setEditDocResolving((prev) => ({ ...prev, [i]: false })); }
                       }} />
                     {editDocResolving[i] ? (
                       <div className="flex items-center gap-1 text-xs text-muted-foreground">
                         <Loader2 className="w-3 h-3 animate-spin" />解析中...
                       </div>
+                    ) : editDocErrors[i] ? (
+                      <p className="text-xs text-destructive">{editDocErrors[i]}</p>
                     ) : link.title ? (
                       <p className="text-xs text-muted-foreground truncate">{link.title}</p>
                     ) : null}
@@ -584,6 +597,7 @@ export function RequirementDetailPage() {
                     onClick={() => {
                       setEditDocLinks(editDocLinks.filter((_, idx) => idx !== i));
                       setEditDocResolving((prev) => { const next = { ...prev }; delete next[i]; return next; });
+                      setEditDocErrors((prev) => { const next = { ...prev }; delete next[i]; return next; });
                     }}>
                     <Trash2 className="w-4 h-4" />
                   </Button>

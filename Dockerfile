@@ -30,6 +30,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     nginx \
     tini \
+    procps \
+    vim \
+    curl \
+    bash-completion \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Claude Code CLI
@@ -61,7 +65,7 @@ RUN git config --global init.defaultBranch main \
 ENV GIT_TERMINAL_PROMPT=0
 ENV CONFIG_PATH=/etc/codemaster/config.yaml
 
-EXPOSE 80
+EXPOSE 8080
 WORKDIR /app
 
 ENTRYPOINT ["tini", "--"]

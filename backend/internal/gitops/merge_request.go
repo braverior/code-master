@@ -36,7 +36,7 @@ func CreateMergeRequest(input MergeRequestInput) (*MergeRequestResult, error) {
 }
 
 func createGitLabMR(input MergeRequestInput) (*MergeRequestResult, error) {
-	apiBase := extractAPIBase(input.GitURL)
+	apiBase := extractAPIBase(rewriteGitURL(input.GitURL))
 	url := fmt.Sprintf("%s/api/v4/projects/%s/merge_requests", apiBase, input.PlatformProjectID)
 
 	body := map[string]interface{}{
@@ -129,7 +129,7 @@ func GetMergeRequestStatus(platform, platformProjectID, mrID, accessToken, gitUR
 }
 
 func getGitLabMRStatus(gitURL, projectID, mrID, token string) (string, error) {
-	apiBase := extractAPIBase(gitURL)
+	apiBase := extractAPIBase(rewriteGitURL(gitURL))
 	url := fmt.Sprintf("%s/api/v4/projects/%s/merge_requests/%s", apiBase, projectID, mrID)
 	req, _ := http.NewRequest("GET", url, nil)
 	req.Header.Set("PRIVATE-TOKEN", token)

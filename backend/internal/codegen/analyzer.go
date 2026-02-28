@@ -34,7 +34,7 @@ func (a *Analyzer) setFailed(repo *model.Repository, errMsg string) {
 	})
 }
 
-func (a *Analyzer) Analyze(ctx context.Context, repo *model.Repository, gitToken string) error {
+func (a *Analyzer) Analyze(ctx context.Context, repo *model.Repository, gitToken, apiKey, baseURL, modelName string) error {
 	a.db.Model(repo).Updates(map[string]interface{}{
 		"analysis_status": "running",
 		"analysis_error":  "",
@@ -72,17 +72,33 @@ func (a *Analyzer) Analyze(ctx context.Context, repo *model.Repository, gitToken
 	analyzeCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
 
-	cmd := exec.CommandContext(analyzeCtx, "claude",
+	args := []string{
 		"-p", prompt,
 		"--output-format", "json",
 		"--allowedTools", "Read,Glob,Grep",
-	)
-	cmd.Dir = workDir
+	}
+	if modelName != "" {
+		args = append(args, "--model", modelName)
+	}
 
-	output, err := cmd.Output()
+	cmd := exec.CommandContext(analyzeCtx, "claude", args...)
+	cmd.Dir = workDir
+	cmd.Env = os.Environ()
+	if apiKey != "" {
+		cmd.Env = append(cmd.Env, "ANTHROPIC_API_KEY="+apiKey)
+	}
+	if baseURL != "" {
+		cmd.Env = append(cmd.Env, "ANTHROPIC_BASE_URL="+baseURL)
+	}
+
+	output, err := cmd.CombinedOutput()
 	if err != nil {
-		a.setFailed(repo, "Claude 分析执行失败: "+err.Error())
-		return fmt.Errorf("claude analyze: %w", err)
+		errDetail := string(output)
+		if len(errDetail) > 500 {
+			errDetail = errDetail[:500]
+		}
+		a.setFailed(repo, fmt.Sprintf("Claude 分析执行失败: %v\n%s", err, errDetail))
+		return fmt.Errorf("claude analyze: %s: %w", errDetail, err)
 	}
 
 	// Extract JSON from Claude CLI output (handles envelope + markdown fences)

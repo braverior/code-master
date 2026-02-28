@@ -8,6 +8,7 @@ import (
 	"github.com/codeMaster/backend/internal/bot"
 	"github.com/codeMaster/backend/internal/codegen"
 	"github.com/codeMaster/backend/internal/config"
+	"github.com/codeMaster/backend/internal/gitops"
 	"github.com/codeMaster/backend/internal/handler"
 	"github.com/codeMaster/backend/internal/model"
 	"github.com/codeMaster/backend/internal/notify"
@@ -31,6 +32,13 @@ func main() {
 	if err != nil {
 		log.Fatalf("load config: %v", err)
 	}
+
+	// Initialize git domain mapping
+	var domainItems []gitops.DomainMappingItem
+	for _, m := range cfg.Codegen.GitDomainMapping {
+		domainItems = append(domainItems, gitops.DomainMappingItem{From: m.From, To: m.To})
+	}
+	gitops.InitDomainMapping(domainItems)
 
 	// Database
 	db, err := gorm.Open(mysql.Open(cfg.Database.DSN()), &gorm.Config{})

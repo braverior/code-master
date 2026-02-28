@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
 	"time"
 
@@ -20,7 +21,7 @@ func NewAIReviewer(db *gorm.DB) *AIReviewer {
 	return &AIReviewer{db: db}
 }
 
-func (r *AIReviewer) RunReview(ctx context.Context, review *model.CodeReview, workDir, diffContent string) error {
+func (r *AIReviewer) RunReview(ctx context.Context, review *model.CodeReview, workDir, diffContent, apiKey, baseURL, modelName string) error {
 	r.db.Model(review).Update("ai_status", "running")
 
 	prompt := BuildReviewPrompt(diffContent)
@@ -28,17 +29,33 @@ func (r *AIReviewer) RunReview(ctx context.Context, review *model.CodeReview, wo
 	reviewCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
 
-	cmd := exec.CommandContext(reviewCtx, "claude",
+	args := []string{
 		"-p", prompt,
 		"--output-format", "json",
 		"--allowedTools", "Read,Glob,Grep",
-	)
-	cmd.Dir = workDir
+	}
+	if modelName != "" {
+		args = append(args, "--model", modelName)
+	}
 
-	output, err := cmd.Output()
+	cmd := exec.CommandContext(reviewCtx, "claude", args...)
+	cmd.Dir = workDir
+	cmd.Env = os.Environ()
+	if apiKey != "" {
+		cmd.Env = append(cmd.Env, "ANTHROPIC_API_KEY="+apiKey)
+	}
+	if baseURL != "" {
+		cmd.Env = append(cmd.Env, "ANTHROPIC_BASE_URL="+baseURL)
+	}
+
+	output, err := cmd.CombinedOutput()
 	if err != nil {
+		errDetail := string(output)
+		if len(errDetail) > 500 {
+			errDetail = errDetail[:500]
+		}
 		r.db.Model(review).Update("ai_status", "failed")
-		return fmt.Errorf("claude review: %w", err)
+		return fmt.Errorf("claude review: %s: %w", errDetail, err)
 	}
 
 	// Extract JSON from Claude CLI output (handles envelope + markdown fences)

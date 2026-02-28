@@ -14,6 +14,8 @@ import (
 )
 
 func Clone(ctx context.Context, gitURL, token, branch, destDir string) error {
+	gitURL = rewriteGitURL(gitURL)
+
 	if err := os.MkdirAll(filepath.Dir(destDir), 0o755); err != nil {
 		return fmt.Errorf("mkdir: %w", err)
 	}
@@ -34,6 +36,8 @@ func Clone(ctx context.Context, gitURL, token, branch, destDir string) error {
 }
 
 func TestConnection(ctx context.Context, gitURL, token string) ([]string, error) {
+	gitURL = rewriteGitURL(gitURL)
+
 	authURL, err := injectToken(gitURL, token)
 	if err != nil {
 		return nil, fmt.Errorf("inject token: %w", err)
@@ -65,6 +69,8 @@ func TestConnection(ctx context.Context, gitURL, token string) ([]string, error)
 // For GitLab: checks project access_level >= 30 (Developer).
 // For GitHub: checks permissions.push == true.
 func CheckPushPermission(platform, gitURL, platformProjectID, token string) error {
+	gitURL = rewriteGitURL(gitURL)
+
 	switch platform {
 	case "gitlab":
 		return checkGitLabPushPermission(gitURL, platformProjectID, token)
@@ -176,6 +182,8 @@ func extractAPIBase(gitURL string) string {
 // Used for iterative development: clone default branch first, then switch to existing target branch.
 // Returns error if the branch does not exist on remote.
 func FetchAndCheckout(ctx context.Context, repoDir, gitURL, token, branch string) error {
+	gitURL = rewriteGitURL(gitURL)
+
 	authURL, err := injectToken(gitURL, token)
 	if err != nil {
 		return fmt.Errorf("inject token: %w", err)

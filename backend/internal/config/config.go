@@ -68,11 +68,17 @@ type JWTConfig struct {
 }
 
 type CodegenConfig struct {
-	MaxWorkers     int    `mapstructure:"max_workers"`
-	MaxTurns       int    `mapstructure:"max_turns"`
-	TimeoutMinutes int    `mapstructure:"timeout_minutes"`
-	WorkDir        string `mapstructure:"work_dir"`
-	UseLocalGit    bool   `mapstructure:"use_local_git"`
+	MaxWorkers       int                `mapstructure:"max_workers"`
+	MaxTurns         int                `mapstructure:"max_turns"`
+	TimeoutMinutes   int                `mapstructure:"timeout_minutes"`
+	WorkDir          string             `mapstructure:"work_dir"`
+	UseLocalGit      bool               `mapstructure:"use_local_git"`
+	GitDomainMapping []GitDomainMapping `mapstructure:"git_domain_mapping"`
+}
+
+type GitDomainMapping struct {
+	From string `mapstructure:"from"`
+	To   string `mapstructure:"to"`
 }
 
 type EncryptConfig struct {

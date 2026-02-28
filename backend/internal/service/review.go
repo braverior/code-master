@@ -65,14 +65,26 @@ func (s *ReviewService) TriggerAIReview(ctx context.Context, taskID uint, review
 		return nil, err
 	}
 
-	go s.runAIReview(rev, &task, s.getUserGitToken(userID))
+	go s.runAIReview(rev, &task, userID)
 	return rev, nil
 }
 
-func (s *ReviewService) runAIReview(rev *model.CodeReview, task *model.CodegenTask, gitToken string) {
+func (s *ReviewService) runAIReview(rev *model.CodeReview, task *model.CodegenTask, userID uint) {
 	ctx := context.Background()
 	workDir := filepath.Join(s.workDir, "review", strconv.FormatUint(uint64(task.ID), 10))
 	defer os.RemoveAll(workDir)
+
+	// Query user's LLM settings and git token
+	var gitToken, apiKey, baseURL, modelName string
+	if userID > 0 {
+		var setting model.UserSetting
+		if err := s.db.Where("user_id = ?", userID).First(&setting).Error; err == nil {
+			gitToken = setting.GitlabToken
+			apiKey = setting.APIKey
+			baseURL = setting.BaseURL
+			modelName = setting.Model
+		}
+	}
 
 	// Resolve token: prefer user's personal token, fall back to repo's stored token
 	token := gitToken
@@ -91,7 +103,7 @@ func (s *ReviewService) runAIReview(rev *model.CodeReview, task *model.CodegenTa
 	}
 
 	diffContent, _ := gitops.GetDiffContent(ctx, workDir, task.SourceBranch, task.TargetBranch, "")
-	s.aiReviewer.RunReview(ctx, rev, workDir, diffContent)
+	s.aiReviewer.RunReview(ctx, rev, workDir, diffContent, apiKey, baseURL, modelName)
 
 	// Notify after AI review completes
 	if s.notifier != nil {
