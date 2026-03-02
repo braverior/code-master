@@ -30,6 +30,7 @@ import type { Requirement, CodeGenTask, ProjectMember, Repository, DocLink } fro
 const statusLabel: Record<string, string> = {
   draft: '草稿', generating: '生成中', generated: '已生成',
   reviewing: '审查中', approved: '已通过', merged: '已合并', rejected: '已拒绝',
+  completed: '已完成', closed: '已关闭',
 };
 
 const statusVariant = (status: string) => {
@@ -40,6 +41,8 @@ const statusVariant = (status: string) => {
     case 'reviewing': return 'outline' as const;
     case 'approved': case 'merged': return 'success' as const;
     case 'rejected': return 'destructive' as const;
+    case 'completed': return 'success' as const;
+    case 'closed': return 'secondary' as const;
     default: return 'secondary' as const;
   }
 };
@@ -84,6 +87,9 @@ export function RequirementDetailPage() {
   const [manualSubmitLoading, setManualSubmitLoading] = useState(false);
   const [manualCommitMessage, setManualCommitMessage] = useState('');
   const [manualCommitUrl, setManualCommitUrl] = useState('');
+  const [completeLoading, setCompleteLoading] = useState(false);
+  const [closeLoading, setCloseLoading] = useState(false);
+  const [reopenLoading, setReopenLoading] = useState(false);
 
   const fetchRequirement = async () => {
     if (!id) return;
@@ -182,6 +188,50 @@ export function RequirementDetailPage() {
     toast({ title: '已复制到剪贴板', variant: 'success' });
   };
 
+  const hasRunningTask = req.codegen_tasks?.some((t) => ['pending', 'cloning', 'running'].includes(t.status)) ?? false;
+  const canComplete = (isCreator || isAdmin) && ['generated', 'reviewing', 'approved', 'merged'].includes(req.status) && !hasRunningTask;
+  const canClose = (isCreator || isAdmin) && ['draft', 'generated', 'reviewing', 'approved', 'rejected', 'merged'].includes(req.status) && !hasRunningTask;
+  const canReopen = (isCreator || isAdmin) && ['completed', 'closed'].includes(req.status);
+
+  const handleComplete = async () => {
+    setCompleteLoading(true);
+    try {
+      await requirementApi.complete(req.id);
+      toast({ title: '需求已完成', variant: 'success' });
+      fetchRequirement();
+    } catch (err) {
+      toast({ title: '操作失败', description: (err as Error).message, variant: 'destructive' });
+    } finally {
+      setCompleteLoading(false);
+    }
+  };
+
+  const handleClose = async () => {
+    setCloseLoading(true);
+    try {
+      await requirementApi.close(req.id);
+      toast({ title: '需求已关闭', variant: 'success' });
+      fetchRequirement();
+    } catch (err) {
+      toast({ title: '操作失败', description: (err as Error).message, variant: 'destructive' });
+    } finally {
+      setCloseLoading(false);
+    }
+  };
+
+  const handleReopen = async () => {
+    setReopenLoading(true);
+    try {
+      await requirementApi.reopen(req.id);
+      toast({ title: '需求已重启', variant: 'success' });
+      fetchRequirement();
+    } catch (err) {
+      toast({ title: '操作失败', description: (err as Error).message, variant: 'destructive' });
+    } finally {
+      setReopenLoading(false);
+    }
+  };
+
   const taskStatusIcon = (status: string) => {
     switch (status) {
       case 'completed': return <CheckCircle className="w-4 h-4 text-green-500" />;
@@ -236,7 +286,7 @@ export function RequirementDetailPage() {
           <div className="flex items-center gap-2 mt-2">
             <Badge variant={statusVariant(req.status)}>{statusLabel[req.status] || req.status}</Badge>
             <Badge variant={priorityVariant(req.priority)}>{req.priority.toUpperCase()}</Badge>
-            {req.deadline && new Date(req.deadline) < new Date() && req.status !== 'merged' && req.status !== 'approved' && (
+            {req.deadline && new Date(req.deadline) < new Date() && req.status !== 'merged' && req.status !== 'approved' && req.status !== 'completed' && req.status !== 'closed' && (
               <Badge variant="destructive" className="gap-1">
                 <AlertTriangle className="w-3 h-3" />已延期
               </Badge>
@@ -250,6 +300,21 @@ export function RequirementDetailPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {canComplete && (
+            <Button variant="outline" size="sm" onClick={handleComplete} disabled={completeLoading}>
+              <CheckCircle className="w-4 h-4 mr-1" />{completeLoading ? '处理中...' : '完成'}
+            </Button>
+          )}
+          {canClose && (
+            <Button variant="outline" size="sm" onClick={handleClose} disabled={closeLoading}>
+              <XCircle className="w-4 h-4 mr-1" />{closeLoading ? '处理中...' : '关闭'}
+            </Button>
+          )}
+          {canReopen && (
+            <Button variant="outline" size="sm" onClick={handleReopen} disabled={reopenLoading}>
+              <Play className="w-4 h-4 mr-1" />{reopenLoading ? '处理中...' : '重启'}
+            </Button>
+          )}
           {latestCompletedTask && req.repository?.git_url && (
             <a
               href={buildCompareUrl(req.repository.git_url, req.repository.platform || 'gitlab', latestCompletedTask.source_branch, latestCompletedTask.target_branch)}

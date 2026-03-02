@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -130,6 +131,35 @@ func (h *Hub) GetEventsPage(taskID int64, offset, limit int64) ([]Event, error) 
 		}
 		ev.ID = offset + int64(i)
 		events = append(events, ev)
+	}
+	return events, nil
+}
+
+// ExportAllEvents returns all events for a task from Redis as a JSON array string.
+func (h *Hub) ExportAllEvents(taskID int64) (string, error) {
+	ctx := context.Background()
+	key := fmt.Sprintf("codegen:stream:%d", taskID)
+	items, err := h.rdb.LRange(ctx, key, 0, -1).Result()
+	if err != nil {
+		return "", err
+	}
+	if len(items) == 0 {
+		return "", nil
+	}
+	return "[" + strings.Join(items, ",") + "]", nil
+}
+
+// ParseEventsFromJSON parses a JSON array of events stored in MySQL OutputLog.
+func ParseEventsFromJSON(data string) ([]Event, error) {
+	if data == "" {
+		return nil, nil
+	}
+	var events []Event
+	if err := json.Unmarshal([]byte(data), &events); err != nil {
+		return nil, err
+	}
+	for i := range events {
+		events[i].ID = int64(i)
 	}
 	return events, nil
 }

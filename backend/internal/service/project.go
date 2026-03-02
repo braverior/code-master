@@ -184,7 +184,7 @@ func (s *ProjectService) RemoveMember(projectID, userID uint) error {
 
 func (s *ProjectService) GetProjectStats(projectID uint) map[string]int64 {
 	stats := make(map[string]int64)
-	statuses := []string{"draft", "generating", "generated", "reviewing", "approved", "merged"}
+	statuses := []string{"draft", "generating", "generated", "reviewing", "approved", "merged", "completed", "closed"}
 	for _, st := range statuses {
 		var count int64
 		s.db.Model(&model.Requirement{}).Where("project_id = ? AND status = ?", projectID, st).Count(&count)
@@ -216,6 +216,6 @@ func (s *ProjectService) GetRequirementCount(projectID uint) int64 {
 
 func (s *ProjectService) GetOpenRequirementCount(projectID uint) int64 {
 	var count int64
-	s.db.Model(&model.Requirement{}).Where("project_id = ? AND status NOT IN ?", projectID, []string{"merged"}).Count(&count)
+	s.db.Model(&model.Requirement{}).Where("project_id = ? AND status NOT IN ?", projectID, []string{"merged", "completed", "closed"}).Count(&count)
 	return count
 }

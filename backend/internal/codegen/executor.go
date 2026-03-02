@@ -362,7 +362,7 @@ func (e *Executor) Run(ctx context.Context) error {
 			"task_id": e.task.ID,
 			"status":  "completed",
 		}})
-		e.hub.SetExpire(int64(e.task.ID), 24*time.Hour)
+		e.persistEvents()
 		return nil
 	}
 	e.broadcastLog("info", "push", "代码已提交", map[string]interface{}{"message": commitMsg})
@@ -420,7 +420,7 @@ func (e *Executor) Run(ctx context.Context) error {
 		"status":  "completed",
 	}})
 
-	e.hub.SetExpire(int64(e.task.ID), 24*time.Hour)
+	e.persistEvents()
 	return nil
 }
 
@@ -451,7 +451,7 @@ func (e *Executor) Cancel() error {
 		"status":  "cancelled",
 	}})
 
-	e.hub.SetExpire(int64(e.task.ID), 24*time.Hour)
+	e.persistEvents()
 	return nil
 }
 
@@ -476,6 +476,14 @@ func (e *Executor) broadcastStatus(status, message string) {
 		Type: "status",
 		Data: data,
 	})
+}
+
+func (e *Executor) persistEvents() {
+	data, err := e.hub.ExportAllEvents(int64(e.task.ID))
+	if err != nil || data == "" {
+		return
+	}
+	e.db.Model(e.task).Update("output_log", data)
 }
 
 func (e *Executor) broadcastLog(level, phase, message string, detail map[string]interface{}) {
@@ -515,7 +523,7 @@ func (e *Executor) fail(errMsg string) error {
 		Type: "done",
 		Data: map[string]interface{}{"task_id": e.task.ID, "status": "failed"},
 	})
-	e.hub.SetExpire(int64(e.task.ID), 24*time.Hour)
+	e.persistEvents()
 	return fmt.Errorf(errMsg)
 }
 

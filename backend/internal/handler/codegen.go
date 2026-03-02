@@ -109,6 +109,17 @@ func (h *CodegenHandler) Stream(c *gin.Context) {
 	// Replay history
 	history, _ := hub.ReplayFrom(int64(taskID), lastEventID)
 	eventID := lastEventID
+
+	// Fallback to MySQL OutputLog when Redis data has expired
+	if len(history) == 0 && lastEventID == 0 {
+		task, err := h.codegenService.GetTask(taskID)
+		if err == nil && task.OutputLog != "" {
+			if dbEvents, err := sse.ParseEventsFromJSON(task.OutputLog); err == nil {
+				history = dbEvents
+			}
+		}
+	}
+
 	for _, ev := range history {
 		data, _ := json.Marshal(ev.Data)
 		evType := ev.Type
@@ -320,6 +331,21 @@ func (h *CodegenHandler) GetLog(c *gin.Context) {
 	hub := h.codegenService.GetHub()
 	totalEvents := hub.GetTotalEvents(int64(taskID))
 	events, _ := hub.GetEventsPage(int64(taskID), offset, limit)
+
+	// Fallback to MySQL OutputLog when Redis data has expired
+	if totalEvents == 0 && task.OutputLog != "" {
+		allEvents, err := sse.ParseEventsFromJSON(task.OutputLog)
+		if err == nil && len(allEvents) > 0 {
+			totalEvents = int64(len(allEvents))
+			end := offset + limit
+			if end > totalEvents {
+				end = totalEvents
+			}
+			if offset < totalEvents {
+				events = allEvents[offset:end]
+			}
+		}
+	}
 
 	eventList := make([]gin.H, 0, len(events))
 	for _, ev := range events {

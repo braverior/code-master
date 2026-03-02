@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useRef, type ReactNode } from 'react';
 import { authApi } from '@/api/auth';
 import type { User } from '@/types';
 
@@ -22,6 +22,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUserState] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const refreshingRef = useRef(false);
 
   useEffect(() => {
     const storedToken = localStorage.getItem('token');
@@ -58,15 +59,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const refreshUser = useCallback(async () => {
-    if (!token) return;
+    if (!token || refreshingRef.current) return;
+    refreshingRef.current = true;
     try {
       const userData = await authApi.getMe();
       setUserState(userData);
       localStorage.setItem('user', JSON.stringify(userData));
     } catch {
       logout();
+    } finally {
+      refreshingRef.current = false;
     }
   }, [token, logout]);
+
+  // Auto-refresh user info when page becomes visible (tab switch back, window focus)
+  useEffect(() => {
+    if (!token) return;
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        refreshUser();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [token, refreshUser]);
 
   return (
     <AuthContext.Provider

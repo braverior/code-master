@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { projectApi } from '@/api/project';
-import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -30,7 +29,6 @@ import type { Project } from '@/types';
 
 export function ProjectListPage() {
   const navigate = useNavigate();
-  const { isPM, isAdmin } = useAuth();
   const { toast } = useToast();
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
@@ -91,8 +89,7 @@ export function ProjectListPage() {
           </h1>
           <p className="text-muted-foreground mt-1">管理你的项目</p>
         </div>
-        {(isPM || isAdmin) && (
-          <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <Dialog open={createOpen} onOpenChange={setCreateOpen}>
             <DialogTrigger asChild>
               <Button><Plus className="w-4 h-4 mr-2" />创建项目</Button>
             </DialogTrigger>
@@ -128,7 +125,6 @@ export function ProjectListPage() {
               </DialogFooter>
             </DialogContent>
           </Dialog>
-        )}
       </div>
 
       {/* Filters */}

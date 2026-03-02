@@ -24,7 +24,7 @@ func (h *DashboardHandler) GetStats(c *gin.Context) {
 
 	var myOpenReqs int64
 	h.db.Model(&model.Requirement{}).
-		Where("(creator_id = ? OR assignee_id = ?) AND status NOT IN ?", userID, userID, []string{"merged"}).
+		Where("(creator_id = ? OR assignee_id = ?) AND status NOT IN ?", userID, userID, []string{"merged", "completed", "closed"}).
 		Count(&myOpenReqs)
 
 	var pendingReviews int64

@@ -180,6 +180,57 @@ func (s *RequirementService) ValidateRepository(projectID uint, repoID uint) err
 	return nil
 }
 
+func (s *RequirementService) Complete(id uint) (*model.Requirement, error) {
+	req, err := s.GetByID(id)
+	if err != nil {
+		return nil, err
+	}
+	allowed := map[string]bool{"generated": true, "reviewing": true, "approved": true, "merged": true}
+	if !allowed[req.Status] {
+		return nil, fmt.Errorf("40003:当前状态 %s 不允许完成", req.Status)
+	}
+	if s.HasRunningTask(id) {
+		return nil, fmt.Errorf("40003:存在运行中的生成任务，无法完成")
+	}
+	if err := s.db.Model(&model.Requirement{}).Where("id = ?", id).Update("status", "completed").Error; err != nil {
+		return nil, err
+	}
+	return s.GetByID(id)
+}
+
+func (s *RequirementService) Close(id uint) (*model.Requirement, error) {
+	req, err := s.GetByID(id)
+	if err != nil {
+		return nil, err
+	}
+	allowed := map[string]bool{"draft": true, "generated": true, "reviewing": true, "approved": true, "rejected": true, "merged": true}
+	if !allowed[req.Status] {
+		return nil, fmt.Errorf("40003:当前状态 %s 不允许关闭", req.Status)
+	}
+	if s.HasRunningTask(id) {
+		return nil, fmt.Errorf("40003:存在运行中的生成任务，无法关闭")
+	}
+	if err := s.db.Model(&model.Requirement{}).Where("id = ?", id).Update("status", "closed").Error; err != nil {
+		return nil, err
+	}
+	return s.GetByID(id)
+}
+
+func (s *RequirementService) Reopen(id uint) (*model.Requirement, error) {
+	req, err := s.GetByID(id)
+	if err != nil {
+		return nil, err
+	}
+	allowed := map[string]bool{"completed": true, "closed": true}
+	if !allowed[req.Status] {
+		return nil, fmt.Errorf("40003:当前状态 %s 不允许重启", req.Status)
+	}
+	if err := s.db.Model(&model.Requirement{}).Where("id = ?", id).Update("status", "draft").Error; err != nil {
+		return nil, err
+	}
+	return s.GetByID(id)
+}
+
 func (s *RequirementService) DB() *gorm.DB {
 	return s.db
 }

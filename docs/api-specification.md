@@ -1211,7 +1211,7 @@ Clone 仓库并使用 Claude Code 分析其结构、技术栈、模块功能。
 |------|------|------|------|
 | page | int | 否 | 页码 |
 | page_size | int | 否 | 每页数量 |
-| status | string | 否 | 按状态筛选: draft / generating / generated / reviewing / approved / merged / rejected |
+| status | string | 否 | 按状态筛选: draft / generating / generated / reviewing / approved / merged / rejected / completed / closed |
 | priority | string | 否 | 按优先级筛选: p0 / p1 / p2 / p3 |
 | assignee_id | int | 否 | 按指派人筛选 |
 | creator_id | int | 否 | 按创建者筛选 |
@@ -1400,7 +1400,92 @@ Clone 仓库并使用 Claude Code 分析其结构、技术栈、模块功能。
 
 ---
 
-### 6.6 全局需求列表
+### 6.6 完成需求
+
+**POST** `/requirements/:id/complete`
+
+**权限:** 创建者或 admin
+
+**前置条件:**
+- 需求状态为 generated / reviewing / approved / merged
+- 没有运行中的生成任务 (pending / cloning / running)
+
+**请求:** 无需请求体
+
+**响应:**
+```json
+{
+  "code": 0,
+  "data": { "id": 15, "status": "completed" }
+}
+```
+
+**错误响应:**
+```json
+{ "code": 40003, "message": "当前状态 draft 不允许完成" }
+{ "code": 40003, "message": "存在运行中的生成任务，无法完成" }
+{ "code": 40303, "message": "非需求创建者或管理员，无权操作" }
+```
+
+---
+
+### 6.7 关闭需求
+
+**POST** `/requirements/:id/close`
+
+**权限:** 创建者或 admin
+
+**前置条件:**
+- 需求状态为 draft / generated / reviewing / approved / rejected / merged
+- 没有运行中的生成任务 (pending / cloning / running)
+
+**请求:** 无需请求体
+
+**响应:**
+```json
+{
+  "code": 0,
+  "data": { "id": 15, "status": "closed" }
+}
+```
+
+**错误响应:**
+```json
+{ "code": 40003, "message": "当前状态 completed 不允许关闭" }
+{ "code": 40003, "message": "存在运行中的生成任务，无法关闭" }
+{ "code": 40303, "message": "非需求创建者或管理员，无权操作" }
+```
+
+---
+
+### 6.8 重启需求
+
+**POST** `/requirements/:id/reopen`
+
+**权限:** 创建者或 admin
+
+**前置条件:**
+- 需求状态为 completed / closed
+
+**请求:** 无需请求体
+
+**响应:**
+```json
+{
+  "code": 0,
+  "data": { "id": 15, "status": "draft" }
+}
+```
+
+**错误响应:**
+```json
+{ "code": 40003, "message": "当前状态 draft 不允许重启" }
+{ "code": 40303, "message": "非需求创建者或管理员，无权操作" }
+```
+
+---
+
+### 6.9 全局需求列表
 
 **GET** `/requirements`
 

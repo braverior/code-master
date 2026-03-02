@@ -67,6 +67,8 @@ export function ProjectDetailPage() {
       case 'reviewing': return 'outline' as const;
       case 'approved': case 'merged': return 'success' as const;
       case 'rejected': return 'destructive' as const;
+      case 'completed': return 'success' as const;
+      case 'closed': return 'secondary' as const;
       default: return 'secondary' as const;
     }
   };
@@ -75,6 +77,7 @@ export function ProjectDetailPage() {
     const map: Record<string, string> = {
       draft: '草稿', generating: '生成中', generated: '已生成',
       reviewing: '审查中', approved: '已通过', merged: '已合并', rejected: '已拒绝',
+      completed: '已完成', closed: '已关闭',
     };
     return map[status] || status;
   };
@@ -677,7 +680,6 @@ function AnalysisResultPanel({ result }: { result: AnalysisResult }) {
 // ---- Requirements Tab ----
 function RequirementsTab({ project }: { project: Project }) {
   const navigate = useNavigate();
-  const { isPM, isAdmin } = useAuth();
   const { toast } = useToast();
   const [requirements, setRequirements] = useState<Requirement[]>([]);
   const [repos, setRepos] = useState<Repository[]>([]);
@@ -749,6 +751,8 @@ function RequirementsTab({ project }: { project: Project }) {
       case 'reviewing': return 'outline' as const;
       case 'approved': case 'merged': return 'success' as const;
       case 'rejected': return 'destructive' as const;
+      case 'completed': return 'success' as const;
+      case 'closed': return 'secondary' as const;
       default: return 'secondary' as const;
     }
   };
@@ -757,6 +761,7 @@ function RequirementsTab({ project }: { project: Project }) {
     const map: Record<string, string> = {
       draft: '草稿', generating: '生成中', generated: '已生成',
       reviewing: '审查中', approved: '已通过', merged: '已合并', rejected: '已拒绝',
+      completed: '已完成', closed: '已关闭',
     };
     return map[status] || status;
   };
@@ -795,10 +800,12 @@ function RequirementsTab({ project }: { project: Project }) {
               <SelectItem value="approved">已通过</SelectItem>
               <SelectItem value="merged">已合并</SelectItem>
               <SelectItem value="rejected">已拒绝</SelectItem>
+              <SelectItem value="completed">已完成</SelectItem>
+              <SelectItem value="closed">已关闭</SelectItem>
             </SelectContent>
           </Select>
         </div>
-        {(isPM || isAdmin) && project.status === 'active' && (
+        {project.status === 'active' && (
           <Dialog open={createOpen} onOpenChange={setCreateOpen}>
             <Button size="sm" onClick={() => setCreateOpen(true)}><Plus className="w-4 h-4 mr-1" />创建需求</Button>
             <DialogContent className="max-w-xl max-h-[85vh] flex flex-col">

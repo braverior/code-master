@@ -60,7 +60,7 @@ func Setup(r *gin.Engine, deps Deps) {
 		// Projects
 		projects := authed.Group("/projects")
 		{
-			projects.POST("", middleware.RequireRole("pm"), deps.ProjectHandler.Create)
+			projects.POST("", deps.ProjectHandler.Create)
 			projects.GET("", deps.ProjectHandler.List)
 			projects.GET("/:id", deps.ProjectHandler.GetDetail)
 			projects.PUT("/:id", deps.ProjectHandler.Update)
@@ -73,7 +73,7 @@ func Setup(r *gin.Engine, deps Deps) {
 			projects.GET("/:id/repos", deps.RepoHandler.List)
 
 			// Requirements under projects
-			projects.POST("/:id/requirements", middleware.RequireRole("pm"), deps.RequirementHandler.Create)
+			projects.POST("/:id/requirements", deps.RequirementHandler.Create)
 			projects.GET("/:id/requirements", deps.RequirementHandler.List)
 		}
 
@@ -95,6 +95,9 @@ func Setup(r *gin.Engine, deps Deps) {
 			requirements.GET("/:id", deps.RequirementHandler.GetDetail)
 			requirements.PUT("/:id", deps.RequirementHandler.Update)
 			requirements.DELETE("/:id", deps.RequirementHandler.Delete)
+			requirements.POST("/:id/complete", deps.RequirementHandler.Complete)
+			requirements.POST("/:id/close", deps.RequirementHandler.Close)
+			requirements.POST("/:id/reopen", deps.RequirementHandler.Reopen)
 
 			// Code generation
 			requirements.POST("/:id/generate", deps.CodegenHandler.Generate)

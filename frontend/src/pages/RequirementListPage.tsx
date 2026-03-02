@@ -21,6 +21,7 @@ const TAB_CONFIG: { key: TabKey; label: string }[] = [
 const statusLabel: Record<string, string> = {
   draft: '草稿', generating: '生成中', generated: '已生成',
   reviewing: '审查中', approved: '已通过', merged: '已合并', rejected: '已拒绝',
+  completed: '已完成', closed: '已关闭',
 };
 
 const statusVariant = (status: string) => {
@@ -31,6 +32,8 @@ const statusVariant = (status: string) => {
     case 'reviewing': return 'outline' as const;
     case 'approved': case 'merged': return 'success' as const;
     case 'rejected': return 'destructive' as const;
+    case 'completed': return 'success' as const;
+    case 'closed': return 'secondary' as const;
     default: return 'secondary' as const;
   }
 };

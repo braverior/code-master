@@ -456,3 +456,81 @@ func (h *RequirementHandler) Delete(c *gin.Context) {
 
 	Success(c, gin.H{"message": "需求已删除"})
 }
+
+// POST /requirements/:id/complete
+func (h *RequirementHandler) Complete(c *gin.Context) {
+	id := parseID(c.Param("id"))
+	userID := middleware.GetCurrentUserID(c)
+
+	req, err := h.reqService.GetByID(id)
+	if err != nil {
+		NotFound(c, 40404, "需求不存在")
+		return
+	}
+
+	if !middleware.GetCurrentUserIsAdmin(c) && req.CreatorID != userID {
+		Forbidden(c, 40303, "非需求创建者或管理员，无权操作")
+		return
+	}
+
+	updated, err := h.reqService.Complete(id)
+	if err != nil {
+		code, msg := parseErrorCode(err)
+		BadRequest(c, code, msg)
+		return
+	}
+
+	Success(c, gin.H{"id": updated.ID, "status": updated.Status})
+}
+
+// POST /requirements/:id/close
+func (h *RequirementHandler) Close(c *gin.Context) {
+	id := parseID(c.Param("id"))
+	userID := middleware.GetCurrentUserID(c)
+
+	req, err := h.reqService.GetByID(id)
+	if err != nil {
+		NotFound(c, 40404, "需求不存在")
+		return
+	}
+
+	if !middleware.GetCurrentUserIsAdmin(c) && req.CreatorID != userID {
+		Forbidden(c, 40303, "非需求创建者或管理员，无权操作")
+		return
+	}
+
+	updated, err := h.reqService.Close(id)
+	if err != nil {
+		code, msg := parseErrorCode(err)
+		BadRequest(c, code, msg)
+		return
+	}
+
+	Success(c, gin.H{"id": updated.ID, "status": updated.Status})
+}
+
+// POST /requirements/:id/reopen
+func (h *RequirementHandler) Reopen(c *gin.Context) {
+	id := parseID(c.Param("id"))
+	userID := middleware.GetCurrentUserID(c)
+
+	req, err := h.reqService.GetByID(id)
+	if err != nil {
+		NotFound(c, 40404, "需求不存在")
+		return
+	}
+
+	if !middleware.GetCurrentUserIsAdmin(c) && req.CreatorID != userID {
+		Forbidden(c, 40303, "非需求创建者或管理员，无权操作")
+		return
+	}
+
+	updated, err := h.reqService.Reopen(id)
+	if err != nil {
+		code, msg := parseErrorCode(err)
+		BadRequest(c, code, msg)
+		return
+	}
+
+	Success(c, gin.H{"id": updated.ID, "status": updated.Status})
+}

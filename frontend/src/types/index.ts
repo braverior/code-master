@@ -114,7 +114,7 @@ export interface ConnectionTestResult {
 
 // ============ Requirement ============
 
-export type RequirementStatus = 'draft' | 'generating' | 'generated' | 'reviewing' | 'approved' | 'merged' | 'rejected';
+export type RequirementStatus = 'draft' | 'generating' | 'generated' | 'reviewing' | 'approved' | 'merged' | 'rejected' | 'completed' | 'closed';
 export type Priority = 'p0' | 'p1' | 'p2' | 'p3';
 
 export interface Requirement {

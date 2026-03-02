@@ -26,6 +26,18 @@ export const requirementApi = {
     return client.delete(`/requirements/${id}`, { data: { force } });
   },
 
+  complete(id: number): Promise<{ id: number; status: string }> {
+    return client.post(`/requirements/${id}/complete`);
+  },
+
+  close(id: number): Promise<{ id: number; status: string }> {
+    return client.post(`/requirements/${id}/close`);
+  },
+
+  reopen(id: number): Promise<{ id: number; status: string }> {
+    return client.post(`/requirements/${id}/reopen`);
+  },
+
   generate(id: number, data?: { extra_context?: string; source_branch?: string }): Promise<{
     task_id: number;
     status: string;

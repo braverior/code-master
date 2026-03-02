@@ -135,7 +135,7 @@
 | doc_links | JSON | | 关联飞书文档链接 |
 | doc_content | LONGTEXT | | 飞书文档抓取的纯文本内容 |
 | priority | ENUM('p0','p1','p2','p3') | DEFAULT 'p1' | 优先级 |
-| status | ENUM('draft','generating','generated','reviewing','approved','merged','rejected') | DEFAULT 'draft' | 需求状态 |
+| status | ENUM('draft','generating','generated','reviewing','approved','merged','rejected','completed','closed') | DEFAULT 'draft' | 需求状态 |
 | creator_id | BIGINT | FK -> users.id, NOT NULL | 创建者 (PM) |
 | assignee_id | BIGINT | FK -> users.id | 指派的 RD |
 | repository_id | BIGINT | FK -> repositories.id | 目标代码仓库 |
@@ -152,6 +152,10 @@
 ```
 draft -> generating -> generated -> reviewing -> approved -> merged
                    \-> failed                  \-> rejected -> draft (可重新编辑)
+
+任意活跃状态 -> completed (手动完成)
+任意活跃状态 -> closed    (手动关闭)
+completed / closed -> draft (重启)
 ```
 
 ---
