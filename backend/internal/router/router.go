@@ -103,6 +103,7 @@ func Setup(r *gin.Engine, deps Deps) {
 			requirements.POST("/:id/generate", deps.CodegenHandler.Generate)
 			requirements.POST("/:id/manual-submit", deps.CodegenHandler.ManualSubmit)
 			requirements.GET("/:id/codegen-tasks", deps.CodegenHandler.ListTasks)
+			requirements.GET("/:id/sessions", deps.CodegenHandler.ListSessions)
 		}
 
 		// CodeGen tasks

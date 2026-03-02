@@ -32,6 +32,8 @@ type Executor struct {
 	timeoutMin   int
 	workDir      string
 	useLocalGit  bool
+	sessionDir      string
+	resumeSessionID string
 	task         *model.CodegenTask
 	requirement  *model.Requirement
 	repo         *model.Repository
@@ -54,6 +56,8 @@ type ExecutorConfig struct {
 	TimeoutMin   int
 	WorkDir      string
 	UseLocalGit  bool
+	SessionDir      string
+	ResumeSessionID string
 	Task         *model.CodegenTask
 	Requirement  *model.Requirement
 	Repo         *model.Repository
@@ -67,22 +71,24 @@ type ExecutorConfig struct {
 
 func NewExecutor(cfg ExecutorConfig) *Executor {
 	return &Executor{
-		db:           cfg.DB,
-		hub:          cfg.Hub,
-		aesKey:       cfg.AESKey,
-		maxTurns:     cfg.MaxTurns,
-		timeoutMin:   cfg.TimeoutMin,
-		workDir:      cfg.WorkDir,
-		useLocalGit:  cfg.UseLocalGit,
-		task:         cfg.Task,
-		requirement:  cfg.Requirement,
-		repo:         cfg.Repo,
-		extraContext: cfg.ExtraContext,
-		docClient:    cfg.DocClient,
-		apiKey:       cfg.APIKey,
-		baseURL:      cfg.BaseURL,
-		modelName:    cfg.ModelName,
-		gitToken:     cfg.GitToken,
+		db:              cfg.DB,
+		hub:             cfg.Hub,
+		aesKey:          cfg.AESKey,
+		maxTurns:        cfg.MaxTurns,
+		timeoutMin:      cfg.TimeoutMin,
+		workDir:         cfg.WorkDir,
+		useLocalGit:     cfg.UseLocalGit,
+		sessionDir:      cfg.SessionDir,
+		resumeSessionID: cfg.ResumeSessionID,
+		task:            cfg.Task,
+		requirement:     cfg.Requirement,
+		repo:            cfg.Repo,
+		extraContext:     cfg.ExtraContext,
+		docClient:       cfg.DocClient,
+		apiKey:          cfg.APIKey,
+		baseURL:         cfg.BaseURL,
+		modelName:       cfg.ModelName,
+		gitToken:        cfg.GitToken,
 	}
 }
 
@@ -94,8 +100,11 @@ func (e *Executor) Run(ctx context.Context) error {
 	e.updateStatus("cloning")
 	e.broadcastStatus("cloning", "正在克隆仓库...")
 
-	workDir := filepath.Join(e.workDir, "codegen", strconv.FormatUint(uint64(e.task.ID), 10))
-	defer os.RemoveAll(workDir)
+	// Use stable workDir per requirement (ensures Claude session path encoding is consistent for --resume)
+	workDir := filepath.Join(e.workDir, "codegen", fmt.Sprintf("req-%d", e.requirement.ID))
+	// Clean and recreate (don't defer removal — keep for session resume)
+	os.RemoveAll(workDir)
+	os.MkdirAll(workDir, 0o755)
 
 	// Resolve git token: prefer user's personal token, fall back to repo's encrypted token
 	token := e.gitToken
@@ -163,21 +172,36 @@ func (e *Executor) Run(ctx context.Context) error {
 	now := time.Now()
 	e.db.Model(e.task).Update("started_at", &now)
 
-	args := []string{
-		"-p", prompt,
-		"--output-format", "stream-json",
-		"--verbose",
-		"--allowedTools", "Read,Write,Edit,Glob,Grep,Bash",
-		"--max-turns", strconv.Itoa(e.maxTurns),
+	var args []string
+	if e.resumeSessionID != "" {
+		// Resume mode: continue from a previous session
+		args = []string{
+			"--resume", e.resumeSessionID,
+			"-p", prompt,
+			"--output-format", "stream-json",
+			"--verbose",
+			"--allowedTools", "Read,Write,Edit,Glob,Grep,Bash",
+			"--max-turns", strconv.Itoa(e.maxTurns),
+		}
+		log.Printf("[executor] 使用会话恢复模式, session_id=%s", e.resumeSessionID)
+	} else {
+		args = []string{
+			"-p", prompt,
+			"--output-format", "stream-json",
+			"--verbose",
+			"--allowedTools", "Read,Write,Edit,Glob,Grep,Bash",
+			"--max-turns", strconv.Itoa(e.maxTurns),
+		}
 	}
 	if e.modelName != "" {
 		args = append(args, "--model", e.modelName)
 	}
 	e.broadcastLog("info", "claude", "Claude Code 启动参数", map[string]interface{}{
-		"command":     "claude",
-		"args":        args,
-		"work_dir":    workDir,
-		"timeout_min": e.timeoutMin,
+		"command":          "claude",
+		"args":             args,
+		"work_dir":         workDir,
+		"timeout_min":      e.timeoutMin,
+		"resume_session":   e.resumeSessionID,
 	})
 
 	cmd := exec.CommandContext(ctx, "claude", args...)
@@ -185,6 +209,9 @@ func (e *Executor) Run(ctx context.Context) error {
 	cmd.Env = append(os.Environ(),
 		fmt.Sprintf("CLAUDE_CODE_MAX_TIMEOUT=%d", e.timeoutMin*60*1000),
 	)
+	if e.sessionDir != "" {
+		cmd.Env = append(cmd.Env, "HOME="+e.sessionDir)
+	}
 	if e.apiKey != "" {
 		cmd.Env = append(cmd.Env, "ANTHROPIC_API_KEY="+e.apiKey)
 	}
@@ -210,6 +237,11 @@ func (e *Executor) Run(ctx context.Context) error {
 	}
 
 	e.pid.Store(int32(cmd.Process.Pid))
+	if e.resumeSessionID != "" {
+		e.broadcastLog("info", "claude", fmt.Sprintf("使用会话恢复模式，从 session %s 继续", e.resumeSessionID), map[string]interface{}{
+			"session_id": e.resumeSessionID,
+		})
+	}
 	e.broadcastLog("info", "claude", "Claude Code 进程已启动", map[string]interface{}{
 		"pid": cmd.Process.Pid,
 	})
@@ -250,6 +282,14 @@ func (e *Executor) Run(ctx context.Context) error {
 
 		event, err := ParseStreamJSON(line)
 		if err != nil || event == nil {
+			continue
+		}
+
+		// Capture session_id from system/init — don't broadcast to client
+		if event.Type == "system_init" {
+			if event.SessionID != "" {
+				e.db.Model(e.task).Update("session_id", event.SessionID)
+			}
 			continue
 		}
 

@@ -5,17 +5,18 @@ import (
 )
 
 type StreamEvent struct {
-	Type     string          `json:"type"`
-	SubType  string          `json:"subtype,omitempty"`
-	Content  string          `json:"content,omitempty"`
-	ToolName string          `json:"tool,omitempty"`
-	ToolID   string          `json:"id,omitempty"`
-	Input    json.RawMessage `json:"input,omitempty"`
-	Output   string          `json:"output,omitempty"`
-	ExitCode *int            `json:"exit_code,omitempty"`
-	Summary  string          `json:"summary,omitempty"`
-	CostUSD  float64         `json:"cost_usd,omitempty"`
-	FilePath string          `json:"-"`
+	Type      string          `json:"type"`
+	SubType   string          `json:"subtype,omitempty"`
+	Content   string          `json:"content,omitempty"`
+	ToolName  string          `json:"tool,omitempty"`
+	ToolID    string          `json:"id,omitempty"`
+	Input     json.RawMessage `json:"input,omitempty"`
+	Output    string          `json:"output,omitempty"`
+	ExitCode  *int            `json:"exit_code,omitempty"`
+	Summary   string          `json:"summary,omitempty"`
+	CostUSD   float64         `json:"cost_usd,omitempty"`
+	SessionID string          `json:"session_id,omitempty"`
+	FilePath  string          `json:"-"`
 }
 
 // rawStreamLine matches the actual Claude Code --output-format stream-json --verbose format.
@@ -30,6 +31,9 @@ type StreamEvent struct {
 type rawStreamLine struct {
 	Type    string `json:"type"`
 	SubType string `json:"subtype,omitempty"`
+
+	// "system" type fields
+	SessionID string `json:"session_id,omitempty"`
 
 	// "assistant" and "user" types nest content under message.content
 	Message *rawMessage `json:"message,omitempty"`
@@ -122,7 +126,12 @@ func ParseStreamJSON(line string) (*StreamEvent, error) {
 		event.Content = raw.Result
 
 	default:
-		// system, etc. — skip
+		// system events — capture session_id from init
+		if raw.Type == "system" && raw.SubType == "init" && raw.SessionID != "" {
+			event.Type = "system_init"
+			event.SessionID = raw.SessionID
+			return event, nil
+		}
 		return nil, nil
 	}
 

@@ -66,6 +66,8 @@ type CodegenTask struct {
 	DiffStat      JSONDiffStat `gorm:"type:json" json:"diff_stat,omitempty"`
 	CommitSHA     string       `gorm:"type:varchar(64)" json:"commit_sha,omitempty"`
 	ErrorMessage  string       `gorm:"type:text" json:"error_message,omitempty"`
+	SessionID     string       `gorm:"type:varchar(128)" json:"session_id,omitempty"`
+	ResumeTaskID  *uint        `gorm:"index" json:"resume_task_id,omitempty"`
 	ClaudeCostUSD float64      `gorm:"type:decimal(10,4)" json:"claude_cost_usd,omitempty"`
 	PID           int          `gorm:"-" json:"-"`
 	StartedAt     *time.Time   `json:"started_at"`

@@ -79,6 +79,13 @@ func main() {
 	pool := codegen.NewPool(cfg.Codegen.MaxWorkers)
 	analyzer := codegen.NewAnalyzer(db, cfg.Encrypt.AESKey, cfg.Codegen.WorkDir)
 
+	// Ensure session dir exists if configured
+	if cfg.Codegen.SessionDir != "" {
+		if err := os.MkdirAll(cfg.Codegen.SessionDir, 0o755); err != nil {
+			log.Printf("Warning: failed to create session dir %s: %v", cfg.Codegen.SessionDir, err)
+		}
+	}
+
 	// Feishu client
 	feishuOAuth := feishu.NewOAuthClient(cfg.Feishu.AppID, cfg.Feishu.AppSecret, cfg.Feishu.RedirectURI)
 
@@ -101,7 +108,7 @@ func main() {
 	projectService := service.NewProjectService(db)
 	repoService := service.NewRepositoryService(db, cfg.Encrypt.AESKey, analyzer)
 	reqService := service.NewRequirementService(db)
-	codegenService := service.NewCodegenService(db, pool, sseHub, cfg.Encrypt.AESKey, cfg.Codegen.MaxTurns, cfg.Codegen.TimeoutMinutes, cfg.Codegen.WorkDir, cfg.Codegen.UseLocalGit)
+	codegenService := service.NewCodegenService(db, pool, sseHub, cfg.Encrypt.AESKey, cfg.Codegen.MaxTurns, cfg.Codegen.TimeoutMinutes, cfg.Codegen.WorkDir, cfg.Codegen.UseLocalGit, cfg.Codegen.SessionDir)
 	reviewService := service.NewReviewService(db, cfg.Encrypt.AESKey, cfg.Codegen.WorkDir)
 	settingService := service.NewSettingService(db, cfg.Encrypt.AESKey)
 

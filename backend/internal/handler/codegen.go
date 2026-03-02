@@ -69,11 +69,12 @@ func (h *CodegenHandler) Generate(c *gin.Context) {
 
 	var body struct {
 		ExtraContext  string `json:"extra_context"`
-		SourceBranch string `json:"source_branch"`
+		SourceBranch  string `json:"source_branch"`
+		ResumeTaskID  *uint  `json:"resume_task_id"`
 	}
 	c.ShouldBindJSON(&body)
 
-	task, queuePos, err := h.codegenService.TriggerGeneration(requirement, repo, body.ExtraContext, body.SourceBranch, middleware.GetCurrentUserID(c))
+	task, queuePos, err := h.codegenService.TriggerGeneration(requirement, repo, body.ExtraContext, body.SourceBranch, middleware.GetCurrentUserID(c), body.ResumeTaskID)
 	if err != nil {
 		InternalError(c, err.Error())
 		return
@@ -218,6 +219,12 @@ func (h *CodegenHandler) GetTask(c *gin.Context) {
 	if task.CommitSHA != "" {
 		data["commit_sha"] = task.CommitSHA
 	}
+	if task.SessionID != "" {
+		data["session_id"] = task.SessionID
+	}
+	if task.ResumeTaskID != nil {
+		data["resume_task_id"] = *task.ResumeTaskID
+	}
 	if task.Requirement != nil {
 		data["requirement"] = gin.H{"id": task.Requirement.ID, "title": task.Requirement.Title}
 	}
@@ -271,6 +278,12 @@ func (h *CodegenHandler) ListTasks(c *gin.Context) {
 		}
 		if t.ErrorMessage != "" {
 			item["error_message"] = t.ErrorMessage
+		}
+		if t.SessionID != "" {
+			item["session_id"] = t.SessionID
+		}
+		if t.ResumeTaskID != nil {
+			item["resume_task_id"] = *t.ResumeTaskID
 		}
 		list = append(list, item)
 	}
@@ -432,4 +445,34 @@ func (h *CodegenHandler) Cancel(c *gin.Context) {
 		"id":     taskID,
 		"status": "cancelled",
 	})
+}
+
+// GET /requirements/:id/sessions
+func (h *CodegenHandler) ListSessions(c *gin.Context) {
+	reqID := parseID(c.Param("id"))
+
+	tasks, err := h.codegenService.ListSessions(reqID)
+	if err != nil {
+		InternalError(c, err.Error())
+		return
+	}
+
+	list := make([]gin.H, 0, len(tasks))
+	for _, t := range tasks {
+		item := gin.H{
+			"id":         t.ID,
+			"session_id": t.SessionID,
+			"status":     t.Status,
+			"created_at": t.CreatedAt,
+		}
+		if t.CompletedAt != nil {
+			item["completed_at"] = t.CompletedAt
+		}
+		if t.ClaudeCostUSD > 0 {
+			item["claude_cost_usd"] = t.ClaudeCostUSD
+		}
+		list = append(list, item)
+	}
+
+	Success(c, list)
 }

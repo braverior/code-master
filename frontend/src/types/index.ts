@@ -170,6 +170,8 @@ export interface CodeGenTask {
   commit_sha?: string;
   error_message?: string;
   claude_cost_usd?: number;
+  session_id?: string;
+  resume_task_id?: number;
   review?: {
     id: number;
     ai_score: number;
@@ -179,6 +181,15 @@ export interface CodeGenTask {
   started_at: string | null;
   completed_at: string | null;
   created_at: string;
+}
+
+export interface SessionInfo {
+  id: number;
+  session_id: string;
+  status: CodeGenStatus;
+  claude_cost_usd?: number;
+  created_at: string;
+  completed_at?: string;
 }
 
 // ============ SSE Events ============

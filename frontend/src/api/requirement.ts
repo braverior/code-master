@@ -1,5 +1,5 @@
 import client from './client';
-import type { Requirement, PaginatedResponse } from '@/types';
+import type { Requirement, PaginatedResponse, SessionInfo } from '@/types';
 
 export const requirementApi = {
   list(params?: Record<string, unknown>): Promise<PaginatedResponse<Requirement>> {
@@ -38,7 +38,7 @@ export const requirementApi = {
     return client.post(`/requirements/${id}/reopen`);
   },
 
-  generate(id: number, data?: { extra_context?: string; source_branch?: string }): Promise<{
+  generate(id: number, data?: { extra_context?: string; source_branch?: string; resume_task_id?: number }): Promise<{
     task_id: number;
     status: string;
     source_branch: string;
@@ -59,5 +59,9 @@ export const requirementApi = {
 
   getCodegenTasks(id: number, params?: Record<string, unknown>): Promise<PaginatedResponse<unknown>> {
     return client.get(`/requirements/${id}/codegen-tasks`, { params });
+  },
+
+  getSessions(id: number): Promise<SessionInfo[]> {
+    return client.get(`/requirements/${id}/sessions`);
   },
 };

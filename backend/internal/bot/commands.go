@@ -327,7 +327,7 @@ func (h *CommandHandler) handleCodegen(user *model.User, args []string) map[stri
 	}
 
 	// Trigger generation
-	task, queuePos, err := h.codegenSvc.TriggerGeneration(req, repo, "", "", user.ID)
+	task, queuePos, err := h.codegenSvc.TriggerGeneration(req, repo, "", "", user.ID, nil)
 	if err != nil {
 		log.Printf("[bot] codegen trigger failed: %v", err)
 		return BuildCard(ColorRed, "代码生成启动失败", []cardField{

@@ -5,6 +5,7 @@ import { projectApi } from '@/api/project';
 import { repositoryApi } from '@/api/repository';
 import { codegenApi } from '@/api/codegen';
 import { feishuApi } from '@/api/feishu';
+import { settingApi } from '@/api/setting';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -23,9 +24,9 @@ import { DeleteConfirmDialog } from '@/components/DeleteConfirmDialog';
 import {
   FileText, ArrowLeft, Edit3, Play, Clock, CheckCircle, XCircle,
   AlertCircle, ExternalLink, Trash2, ArrowRight, Plus, Loader2,
-  ClipboardCheck, Users, GitCompare, GitBranch, Copy, Upload, AlertTriangle,
+  ClipboardCheck, Users, GitCompare, GitBranch, Copy, Upload, AlertTriangle, RotateCcw, Settings,
 } from 'lucide-react';
-import type { Requirement, CodeGenTask, ProjectMember, Repository, DocLink } from '@/types';
+import type { Requirement, CodeGenTask, ProjectMember, Repository, DocLink, SessionInfo } from '@/types';
 
 const statusLabel: Record<string, string> = {
   draft: '草稿', generating: '生成中', generated: '已生成',
@@ -79,6 +80,9 @@ export function RequirementDetailPage() {
   const [generateOpen, setGenerateOpen] = useState(false);
   const [generateLoading, setGenerateLoading] = useState(false);
   const [extraContext, setExtraContext] = useState('');
+  const [sessions, setSessions] = useState<SessionInfo[]>([]);
+  const [resumeEnabled, setResumeEnabled] = useState(false);
+  const [selectedSessionTaskId, setSelectedSessionTaskId] = useState<number | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [reviewDialogOpen, setReviewDialogOpen] = useState(false);
   const [selectedReviewers, setSelectedReviewers] = useState<number[]>([]);
@@ -90,6 +94,7 @@ export function RequirementDetailPage() {
   const [completeLoading, setCompleteLoading] = useState(false);
   const [closeLoading, setCloseLoading] = useState(false);
   const [reopenLoading, setReopenLoading] = useState(false);
+  const [settingsReady, setSettingsReady] = useState<{ apiKey: boolean; gitToken: boolean } | null>(null);
 
   const fetchRequirement = async () => {
     if (!id) return;
@@ -105,6 +110,31 @@ export function RequirementDetailPage() {
 
   useEffect(() => { fetchRequirement(); }, [id]);
 
+  // Check if user has configured API key and git token
+  useEffect(() => {
+    settingApi.getLLM().then((s) => {
+      setSettingsReady({
+        apiKey: !!s.api_key && s.api_key !== '',
+        gitToken: !!s.gitlab_token && s.gitlab_token !== '',
+      });
+    }).catch(() => setSettingsReady({ apiKey: false, gitToken: false }));
+  }, []);
+
+  // Fetch sessions when generate dialog opens
+  useEffect(() => {
+    if (generateOpen && req) {
+      requirementApi.getSessions(req.id).then((data) => {
+        setSessions(data || []);
+        if (data && data.length > 0) {
+          setSelectedSessionTaskId(data[0].id);
+        }
+      }).catch(() => setSessions([]));
+    } else {
+      setResumeEnabled(false);
+      setSelectedSessionTaskId(null);
+    }
+  }, [generateOpen]);
+
   useEffect(() => {
     if (!req?.project?.id) return;
     const projectId = req.project.id;
@@ -119,6 +149,7 @@ export function RequirementDetailPage() {
   const isAssignee = req.assignee?.id === user?.id;
   const canEdit = (isCreator || isAdmin) && (req.status === 'draft' || req.status === 'rejected');
   const canGenerate = (isAssignee || isAdmin) && req.status !== 'generating' && req.repository && req.assignee;
+  const settingsMissing = settingsReady && (!settingsReady.apiKey || !settingsReady.gitToken);
 
   const handleEdit = async () => {
     setEditLoading(true);
@@ -149,7 +180,10 @@ export function RequirementDetailPage() {
   const handleGenerate = async () => {
     setGenerateLoading(true);
     try {
-      const result = await requirementApi.generate(req.id, { extra_context: extraContext || undefined });
+      const data: { extra_context?: string; resume_task_id?: number } = {};
+      if (extraContext) data.extra_context = extraContext;
+      if (resumeEnabled && selectedSessionTaskId) data.resume_task_id = selectedSessionTaskId;
+      const result = await requirementApi.generate(req.id, data);
       toast({ title: '代码生成已启动', variant: 'success' });
       setGenerateOpen(false);
       navigate(`/codegen/${result.task_id}`);
@@ -357,9 +391,16 @@ export function RequirementDetailPage() {
               <Button variant="outline" onClick={() => setManualSubmitOpen(true)}>
                 <Upload className="w-4 h-4 mr-1" />手动提交
               </Button>
-              <Button onClick={() => setGenerateOpen(true)}>
-                <Play className="w-4 h-4 mr-1" />生成代码
-              </Button>
+              {settingsMissing ? (
+                <Button variant="outline" onClick={() => navigate('/settings')} className="text-muted-foreground">
+                  <Settings className="w-4 h-4 mr-1" />
+                  请先完善设置
+                </Button>
+              ) : (
+                <Button onClick={() => setGenerateOpen(true)} disabled={!settingsReady}>
+                  <Play className="w-4 h-4 mr-1" />生成代码
+                </Button>
+              )}
             </>
           )}
         </div>
@@ -411,6 +452,12 @@ export function RequirementDetailPage() {
                         <div>
                           <p className="text-sm font-medium flex items-center gap-1.5">
                             任务 #{task.id}
+                            {task.session_id && (
+                              <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-mono"
+                                title={task.session_id}>
+                                {task.session_id.substring(0, 8)}
+                              </Badge>
+                            )}
                             {task.prompt === '手动提交' && (
                               <Badge variant="outline" className="text-[10px] px-1.5 py-0">手动提交</Badge>
                             )}
@@ -690,15 +737,62 @@ export function RequirementDetailPage() {
             <DialogDescription>AI 将根据需求描述自动生成代码</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
+            {settingsMissing && (
+              <div className="rounded-md border border-yellow-500/50 bg-yellow-500/5 p-3 flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 text-yellow-500 shrink-0 mt-0.5" />
+                <div className="flex-1 text-sm">
+                  <p className="font-medium text-yellow-500">请先完善个人设置</p>
+                  <p className="text-muted-foreground mt-0.5">
+                    {!settingsReady?.apiKey && '缺少 API Key'}
+                    {!settingsReady?.apiKey && !settingsReady?.gitToken && '、'}
+                    {!settingsReady?.gitToken && '缺少 Git Token'}
+                    ，无法启动代码生成。
+                  </p>
+                  <Button variant="link" size="sm" className="px-0 h-auto mt-1 text-yellow-500"
+                    onClick={() => navigate('/settings')}>
+                    <Settings className="w-3.5 h-3.5 mr-1" />前往设置页面
+                  </Button>
+                </div>
+              </div>
+            )}
             <div className="space-y-2">
               <label className="text-sm font-medium">补充说明（可选）</label>
               <Textarea placeholder="给 AI 的额外上下文信息..." value={extraContext}
                 onChange={(e) => setExtraContext(e.target.value)} rows={3} />
             </div>
+            {sessions.length > 0 && (
+              <div className="space-y-3 rounded-md border p-3">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" checked={resumeEnabled}
+                    onChange={(e) => setResumeEnabled(e.target.checked)}
+                    className="rounded border-gray-300" />
+                  <RotateCcw className="w-4 h-4 text-muted-foreground" />
+                  <span className="text-sm font-medium">恢复上次会话</span>
+                  <span className="text-xs text-muted-foreground">（Claude 将保留之前的上下文）</span>
+                </label>
+                {resumeEnabled && (
+                  <Select value={selectedSessionTaskId ? String(selectedSessionTaskId) : ''}
+                    onValueChange={(v) => setSelectedSessionTaskId(Number(v))}>
+                    <SelectTrigger className="h-9">
+                      <SelectValue placeholder="选择要恢复的会话" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {sessions.map((s) => (
+                        <SelectItem key={s.id} value={String(s.id)}>
+                          任务 #{s.id} · {s.status === 'completed' ? '已完成' : s.status === 'failed' ? '失败' : s.status}
+                          {s.claude_cost_usd ? ` · $${s.claude_cost_usd.toFixed(2)}` : ''}
+                          {' · '}{new Date(s.created_at).toLocaleString('zh-CN')}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setGenerateOpen(false)}>取消</Button>
-            <Button onClick={handleGenerate} disabled={generateLoading}>
+            <Button onClick={handleGenerate} disabled={generateLoading || !!settingsMissing}>
               {generateLoading ? <><Spinner size="sm" className="mr-2" />启动中...</> : <><Play className="w-4 h-4 mr-1" />开始生成</>}
             </Button>
           </DialogFooter>

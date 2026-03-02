@@ -29,6 +29,7 @@ type CodegenService struct {
 	timeoutMin  int
 	workDir     string
 	useLocalGit bool
+	sessionDir  string
 
 	notifier  notify.Notifier
 	docClient     *feishu.DocClient
@@ -37,7 +38,7 @@ type CodegenService struct {
 	executors map[uint]*codegen.Executor
 }
 
-func NewCodegenService(db *gorm.DB, pool *codegen.Pool, hub *sse.Hub, aesKey string, maxTurns, timeoutMin int, workDir string, useLocalGit bool) *CodegenService {
+func NewCodegenService(db *gorm.DB, pool *codegen.Pool, hub *sse.Hub, aesKey string, maxTurns, timeoutMin int, workDir string, useLocalGit bool, sessionDir string) *CodegenService {
 	return &CodegenService{
 		db:          db,
 		pool:        pool,
@@ -47,6 +48,7 @@ func NewCodegenService(db *gorm.DB, pool *codegen.Pool, hub *sse.Hub, aesKey str
 		timeoutMin:  timeoutMin,
 		workDir:     workDir,
 		useLocalGit: useLocalGit,
+		sessionDir:  sessionDir,
 		executors:   make(map[uint]*codegen.Executor),
 	}
 }
@@ -61,11 +63,22 @@ func (s *CodegenService) SetDocClient(dc *feishu.DocClient) {
 	s.docClient = dc
 }
 
-func (s *CodegenService) TriggerGeneration(requirement *model.Requirement, repo *model.Repository, extraContext, sourceBranch string, userID uint) (*model.CodegenTask, int, error) {
+func (s *CodegenService) TriggerGeneration(requirement *model.Requirement, repo *model.Repository, extraContext, sourceBranch string, userID uint, resumeTaskID *uint) (*model.CodegenTask, int, error) {
 	if sourceBranch == "" {
 		sourceBranch = repo.DefaultBranch
 	}
 	targetBranch := fmt.Sprintf("code-master/req-%d", requirement.ID)
+
+	// Look up previous session for resume
+	var resumeSessionID string
+	if resumeTaskID != nil && *resumeTaskID > 0 {
+		var prevTask model.CodegenTask
+		if s.db.First(&prevTask, *resumeTaskID).Error == nil {
+			if prevTask.SessionID != "" && prevTask.RequirementID == requirement.ID {
+				resumeSessionID = prevTask.SessionID
+			}
+		}
+	}
 
 	task := &model.CodegenTask{
 		RequirementID: requirement.ID,
@@ -74,6 +87,7 @@ func (s *CodegenService) TriggerGeneration(requirement *model.Requirement, repo 
 		TargetBranch:  targetBranch,
 		ExtraContext:  extraContext,
 		Status:        "pending",
+		ResumeTaskID:  resumeTaskID,
 	}
 	if err := s.db.Create(task).Error; err != nil {
 		return nil, 0, err
@@ -94,22 +108,24 @@ func (s *CodegenService) TriggerGeneration(requirement *model.Requirement, repo 
 	}
 
 	executor := codegen.NewExecutor(codegen.ExecutorConfig{
-		DB:           s.db,
-		Hub:          s.hub,
-		AESKey:       s.aesKey,
-		MaxTurns:     s.maxTurns,
-		TimeoutMin:   s.timeoutMin,
-		WorkDir:      s.workDir,
-		UseLocalGit:  s.useLocalGit,
-		Task:         task,
-		Requirement:  requirement,
-		Repo:         repo,
-		ExtraContext: extraContext,
-		DocClient:    s.docClient,
-		APIKey:       apiKey,
-		BaseURL:      baseURL,
-		ModelName:    modelName,
-		GitToken:     gitToken,
+		DB:              s.db,
+		Hub:             s.hub,
+		AESKey:          s.aesKey,
+		MaxTurns:        s.maxTurns,
+		TimeoutMin:      s.timeoutMin,
+		WorkDir:         s.workDir,
+		UseLocalGit:     s.useLocalGit,
+		SessionDir:      s.sessionDir,
+		ResumeSessionID: resumeSessionID,
+		Task:            task,
+		Requirement:     requirement,
+		Repo:            repo,
+		ExtraContext:     extraContext,
+		DocClient:       s.docClient,
+		APIKey:          apiKey,
+		BaseURL:         baseURL,
+		ModelName:       modelName,
+		GitToken:        gitToken,
 	})
 
 	s.mu.Lock()
@@ -325,4 +341,14 @@ func (s *CodegenService) CancelTask(taskID uint) error {
 
 func (s *CodegenService) GetHub() *sse.Hub {
 	return s.hub
+}
+
+// ListSessions returns all tasks for a requirement that have a session_id (available for resume).
+func (s *CodegenService) ListSessions(requirementID uint) ([]model.CodegenTask, error) {
+	var tasks []model.CodegenTask
+	if err := s.db.Where("requirement_id = ? AND session_id != ''", requirementID).
+		Order("created_at desc").Find(&tasks).Error; err != nil {
+		return nil, err
+	}
+	return tasks, nil
 }

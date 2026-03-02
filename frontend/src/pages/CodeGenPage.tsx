@@ -384,6 +384,21 @@ export function CodeGenPage() {
                   <span className="font-mono text-xs">{stream.status.pid}</span>
                 </div>
               )}
+              {task.session_id && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Session ID</span>
+                  <span className="font-mono text-xs truncate max-w-[180px]" title={task.session_id}>{task.session_id}</span>
+                </div>
+              )}
+              {task.resume_task_id && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">恢复自</span>
+                  <span className="text-xs text-primary cursor-pointer hover:underline"
+                    onClick={() => navigate(`/codegen/${task.resume_task_id}`)}>
+                    任务 #{task.resume_task_id}
+                  </span>
+                </div>
+              )}
             </CardContent>
           </Card>
 

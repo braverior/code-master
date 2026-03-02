@@ -73,6 +73,7 @@ type CodegenConfig struct {
 	TimeoutMinutes   int                `mapstructure:"timeout_minutes"`
 	WorkDir          string             `mapstructure:"work_dir"`
 	UseLocalGit      bool               `mapstructure:"use_local_git"`
+	SessionDir       string             `mapstructure:"session_dir"` // Claude HOME 目录，用于持久化 session
 	GitDomainMapping []GitDomainMapping `mapstructure:"git_domain_mapping"`
 }
 

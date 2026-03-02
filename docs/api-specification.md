@@ -1548,7 +1548,8 @@ Clone 仓库并使用 Claude Code 分析其结构、技术栈、模块功能。
 ```json
 {
   "extra_context": "参考现有 login handler 的实现风格，使用相同的错误处理模式",
-  "source_branch": "develop"
+  "source_branch": "develop",
+  "resume_task_id": 38
 }
 ```
 
@@ -1556,12 +1557,14 @@ Clone 仓库并使用 Claude Code 分析其结构、技术栈、模块功能。
 |------|------|------|------|------|
 | extra_context | string | 否 | 最大 5000 字符 | 给 AI 的补充说明 |
 | source_branch | string | 否 | 合法分支名 | 基于哪个分支，默认取仓库 default_branch |
+| resume_task_id | uint | 否 | 有效的 task ID | 恢复指定任务的 Claude 会话，实现上下文延续 |
 
 **后端行为:**
 1. 创建 `codegen_tasks` 记录，status=pending
-2. 更新需求 status=generating
-3. 将任务推入执行队列
-4. 返回任务 ID
+2. 如果传入 `resume_task_id`，从该任务记录中查找 `session_id`，校验属于同一需求
+3. 更新需求 status=generating
+4. 将任务推入执行队列（如果有 session_id，启动时使用 `--resume <session_id>` 参数）
+5. 返回任务 ID
 
 **响应:**
 ```json
@@ -1802,6 +1805,8 @@ data: {"task_id":42,"status":"completed","review_id":10}
     },
     "commit_sha": "a1b2c3d4e5f6",
     "claude_cost_usd": 0.0523,
+    "session_id": "abc12345-def6-7890-abcd-ef1234567890",
+    "resume_task_id": 38,
     "review": {
       "id": 10,
       "ai_score": 85,
@@ -1815,7 +1820,7 @@ data: {"task_id":42,"status":"completed","review_id":10}
 }
 ```
 
-> `extra_context` 为用户在触发生成时提供的补充说明。`commit_sha` 为推送后的 commit hash。`error_message` 在任务失败时返回。
+> `extra_context` 为用户在触发生成时提供的补充说明。`commit_sha` 为推送后的 commit hash。`error_message` 在任务失败时返回。`session_id` 为 Claude Code 的会话 ID，可用于后续 resume。`resume_task_id` 表示本次生成恢复自哪个任务的会话。
 
 ---
 
@@ -1842,6 +1847,8 @@ data: {"task_id":42,"status":"completed","review_id":10}
         "target_branch": "feature/req-15-user-registration",
         "diff_stat": { "files_changed": 5, "additions": 230, "deletions": 12 },
         "claude_cost_usd": 0.0523,
+        "session_id": "abc12345-def6-7890-abcd-ef1234567890",
+        "resume_task_id": 38,
         "started_at": "2026-02-12T11:05:10Z",
         "completed_at": "2026-02-12T11:08:45Z",
         "created_at": "2026-02-12T11:05:00Z"
@@ -1851,6 +1858,7 @@ data: {"task_id":42,"status":"completed","review_id":10}
         "status": "failed",
         "target_branch": "feature/req-15-user-registration",
         "error_message": "Claude Code 执行超时",
+        "session_id": "xyz98765-abc1-2345-defg-hi6789012345",
         "started_at": "2026-02-12T10:00:10Z",
         "completed_at": "2026-02-12T10:10:10Z",
         "created_at": "2026-02-12T10:00:00Z"
@@ -2021,6 +2029,50 @@ data: {"task_id":42,"status":"completed","review_id":10}
 { "code": 40404, "message": "需求不存在" }
 { "code": 40004, "message": "需求未关联代码仓库，请先关联仓库" }
 ```
+
+---
+
+### 7.9 获取需求的会话列表
+
+**GET** `/requirements/:id/sessions`
+
+**说明:** 查询指定需求下所有拥有 `session_id` 的生成任务，用于前端展示可恢复的历史会话列表。
+
+**响应:**
+```json
+{
+  "code": 0,
+  "data": [
+    {
+      "id": 42,
+      "session_id": "abc12345-def6-7890-abcd-ef1234567890",
+      "status": "completed",
+      "claude_cost_usd": 0.0523,
+      "created_at": "2026-02-12T11:05:00Z",
+      "completed_at": "2026-02-12T11:08:45Z"
+    },
+    {
+      "id": 38,
+      "session_id": "xyz98765-abc1-2345-defg-hi6789012345",
+      "status": "failed",
+      "claude_cost_usd": 0.0312,
+      "created_at": "2026-02-12T10:00:00Z",
+      "completed_at": "2026-02-12T10:10:10Z"
+    }
+  ]
+}
+```
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | uint | 生成任务 ID，可作为 `resume_task_id` 传入 7.1 触发代码生成接口 |
+| session_id | string | Claude Code 的会话 ID |
+| status | string | 任务状态: completed / failed / cancelled |
+| claude_cost_usd | float | 该次生成的费用 (可选，为 0 时不返回) |
+| created_at | string | 任务创建时间 |
+| completed_at | string | 任务完成时间 (可选) |
+
+> 返回结果按 `created_at desc` 排序，最近的会话排在前面。如果该需求没有任何带 session_id 的任务，返回空数组 `[]`。
 
 ---
 
@@ -2576,6 +2628,7 @@ data: {"task_id":42,"status":"completed","review_id":10}
 | 代码生成 | 查看 Diff | Member | Member | Y | completed 状态 |
 | 代码生成 | 查看日志 | Member | Member | Y | |
 | 代码生成 | 取消生成 | - | Trigger | Y | running 状态 |
+| 代码生成 | 查看会话列表 | Member | Member | Y | |
 | Review | 触发 AI Review | - | Member | Y | completed 状态 |
 | Review | 查看 Review | Member | Member | Y | |
 | Review | 审查列表 | Y | Y | Y | |
