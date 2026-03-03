@@ -330,11 +330,21 @@ func (s *CodegenService) CancelTask(taskID uint) error {
 		if err := s.db.First(&task, taskID).Error; err != nil {
 			return err
 		}
-		if task.Status == "pending" {
-			s.db.Model(&task).Update("status", "cancelled")
+		switch task.Status {
+		case "pending", "cloning", "running":
+			// Executor not in memory (e.g. server restarted) — force cancel in DB
+			now := time.Now()
+			s.db.Model(&task).Updates(map[string]interface{}{
+				"status":       "cancelled",
+				"completed_at": &now,
+			})
+			if task.RequirementID > 0 {
+				s.db.Model(&model.Requirement{}).Where("id = ?", task.RequirementID).Update("status", "draft")
+			}
 			return nil
+		default:
+			return fmt.Errorf("40003:任务已完成，无法取消")
 		}
-		return fmt.Errorf("40003:任务已完成，无法取消")
 	}
 	return executor.Cancel()
 }

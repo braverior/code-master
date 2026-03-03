@@ -20,6 +20,7 @@ type Deps struct {
 	DashboardHandler   *handler.DashboardHandler
 	FeishuHandler      *handler.FeishuHandler
 	SettingHandler     *handler.SettingHandler
+	OpenHandler        *handler.OpenHandler
 }
 
 func Setup(r *gin.Engine, deps Deps) {
@@ -32,6 +33,12 @@ func Setup(r *gin.Engine, deps Deps) {
 	{
 		auth.GET("/feishu/login", deps.AuthHandler.FeishuLogin)
 		auth.GET("/feishu/callback", deps.AuthHandler.FeishuCallback)
+	}
+
+	// Open routes (token-based auth, no login required)
+	open := api.Group("/open")
+	{
+		open.GET("/requirements/:id", deps.OpenHandler.GetRequirementDetail)
 	}
 
 	// Authenticated routes
@@ -98,6 +105,7 @@ func Setup(r *gin.Engine, deps Deps) {
 			requirements.POST("/:id/complete", deps.RequirementHandler.Complete)
 			requirements.POST("/:id/close", deps.RequirementHandler.Close)
 			requirements.POST("/:id/reopen", deps.RequirementHandler.Reopen)
+			requirements.POST("/:id/share-token", deps.RequirementHandler.GenerateShareToken)
 
 			// Code generation
 			requirements.POST("/:id/generate", deps.CodegenHandler.Generate)

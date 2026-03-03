@@ -34,6 +34,8 @@ spec:
             - name: config
               mountPath: /etc/codemaster
               readOnly: true
+            - name: work
+              mountPath: /data/work
           resources:
             requests:
               cpu: "100m"
@@ -54,3 +56,6 @@ spec:
         - name: config
           configMap:
             name: codemaster-config
+        - name: work
+          persistentVolumeClaim:
+            claimName: codemaster-work

@@ -1,6 +1,10 @@
 package handler
 
 import (
+	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"fmt"
 	"time"
 
 	"github.com/codeMaster/backend/internal/middleware"
@@ -8,16 +12,18 @@ import (
 	"github.com/codeMaster/backend/internal/notify"
 	"github.com/codeMaster/backend/internal/service"
 	"github.com/gin-gonic/gin"
+	"github.com/redis/go-redis/v9"
 )
 
 type RequirementHandler struct {
 	reqService     *service.RequirementService
 	projectService *service.ProjectService
 	notifier       notify.Notifier
+	rdb            *redis.Client
 }
 
-func NewRequirementHandler(reqService *service.RequirementService, projectService *service.ProjectService, notifier notify.Notifier) *RequirementHandler {
-	return &RequirementHandler{reqService: reqService, projectService: projectService, notifier: notifier}
+func NewRequirementHandler(reqService *service.RequirementService, projectService *service.ProjectService, notifier notify.Notifier, rdb *redis.Client) *RequirementHandler {
+	return &RequirementHandler{reqService: reqService, projectService: projectService, notifier: notifier, rdb: rdb}
 }
 
 // POST /projects/:id/requirements
@@ -533,4 +539,37 @@ func (h *RequirementHandler) Reopen(c *gin.Context) {
 	}
 
 	Success(c, gin.H{"id": updated.ID, "status": updated.Status})
+}
+
+// POST /requirements/:id/share-token
+func (h *RequirementHandler) GenerateShareToken(c *gin.Context) {
+	id := parseID(c.Param("id"))
+
+	_, err := h.reqService.GetByID(id)
+	if err != nil {
+		NotFound(c, 40404, "需求不存在")
+		return
+	}
+
+	// Generate a short random token (12 bytes = 24 hex chars)
+	b := make([]byte, 12)
+	if _, err := rand.Read(b); err != nil {
+		InternalError(c, "生成 token 失败")
+		return
+	}
+	token := hex.EncodeToString(b)
+
+	// Store in Redis: share_token:<token> -> requirement_id, TTL 1 hour
+	ttl := 1 * time.Hour
+	expiresAt := time.Now().Add(ttl)
+	key := fmt.Sprintf("share_token:%s", token)
+	if err := h.rdb.Set(context.Background(), key, id, ttl).Err(); err != nil {
+		InternalError(c, "存储 token 失败")
+		return
+	}
+
+	Success(c, gin.H{
+		"token":      token,
+		"expires_at": expiresAt,
+	})
 }

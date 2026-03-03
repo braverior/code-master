@@ -64,4 +64,8 @@ export const requirementApi = {
   getSessions(id: number): Promise<SessionInfo[]> {
     return client.get(`/requirements/${id}/sessions`);
   },
+
+  generateShareToken(id: number): Promise<{ token: string; expires_at: string }> {
+    return client.post(`/requirements/${id}/share-token`);
+  },
 };

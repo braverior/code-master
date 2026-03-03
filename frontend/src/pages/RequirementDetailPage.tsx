@@ -25,6 +25,7 @@ import {
   FileText, ArrowLeft, Edit3, Play, Clock, CheckCircle, XCircle,
   AlertCircle, ExternalLink, Trash2, ArrowRight, Plus, Loader2,
   ClipboardCheck, Users, GitCompare, GitBranch, Copy, Upload, AlertTriangle, RotateCcw, Settings,
+  Terminal, Share2,
 } from 'lucide-react';
 import type { Requirement, CodeGenTask, ProjectMember, Repository, DocLink, SessionInfo } from '@/types';
 
@@ -95,6 +96,9 @@ export function RequirementDetailPage() {
   const [closeLoading, setCloseLoading] = useState(false);
   const [reopenLoading, setReopenLoading] = useState(false);
   const [settingsReady, setSettingsReady] = useState<{ apiKey: boolean; gitToken: boolean } | null>(null);
+  const [shareToken, setShareToken] = useState('');
+  const [shareTokenLoading, setShareTokenLoading] = useState(false);
+  const [shareTokenExpiresAt, setShareTokenExpiresAt] = useState('');
 
   const fetchRequirement = async () => {
     if (!id) return;
@@ -263,6 +267,19 @@ export function RequirementDetailPage() {
       toast({ title: '操作失败', description: (err as Error).message, variant: 'destructive' });
     } finally {
       setReopenLoading(false);
+    }
+  };
+
+  const handleGenerateShareToken = async () => {
+    setShareTokenLoading(true);
+    try {
+      const data = await requirementApi.generateShareToken(req.id);
+      setShareToken(data.token);
+      setShareTokenExpiresAt(data.expires_at);
+    } catch (err) {
+      toast({ title: '生成 Token 失败', description: (err as Error).message, variant: 'destructive' });
+    } finally {
+      setShareTokenLoading(false);
     }
   };
 
@@ -575,6 +592,43 @@ export function RequirementDetailPage() {
               </CardContent>
             </Card>
           )}
+
+          {/* Claude Code */}
+          <Card>
+            <CardHeader><CardTitle className="text-lg flex items-center gap-2"><Terminal className="w-4 h-4" />Claude Code</CardTitle></CardHeader>
+            <CardContent className="space-y-3">
+              {!shareToken ? (
+                <>
+                  <p className="text-xs text-muted-foreground">
+                    生成提示词，复制后发送给 Claude Code 即可读取此需求并开始开发。
+                  </p>
+                  <Button variant="outline" size="sm" className="w-full" onClick={handleGenerateShareToken} disabled={shareTokenLoading}>
+                    {shareTokenLoading ? <><Spinner size="sm" className="mr-2" />生成中...</> : <><Share2 className="w-4 h-4 mr-1" />生成提示词</>}
+                  </Button>
+                </>
+              ) : (
+                <div className="space-y-2">
+                  <div className="flex items-start gap-2">
+                    <code className="text-xs bg-muted px-2 py-1.5 rounded flex-1 break-all leading-relaxed select-all whitespace-pre-wrap">
+                      请先用 curl 工具获取以下链接的需求内容，然后基于需求完成开发{'\n'}{window.location.origin}/api/v1/open/requirements/{req.id}?token={shareToken}
+                    </code>
+                    <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0 mt-0.5"
+                      onClick={() => copyToClipboard(
+                        `请先用 curl 工具获取以下链接的需求内容，然后基于需求完成开发\n${window.location.origin}/api/v1/open/requirements/${req.id}?token=${shareToken}`
+                      )}>
+                      <Copy className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    Token 有效期 1 小时，过期时间：{new Date(shareTokenExpiresAt).toLocaleString('zh-CN')}
+                  </p>
+                  <Button variant="ghost" size="sm" className="w-full text-xs" onClick={handleGenerateShareToken} disabled={shareTokenLoading}>
+                    {shareTokenLoading ? '生成中...' : '重新生成'}
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
           {req.latest_review && (
             <Card>

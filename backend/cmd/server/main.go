@@ -148,12 +148,13 @@ func main() {
 	userHandler := handler.NewUserHandler(authService)
 	projectHandler := handler.NewProjectHandler(projectService)
 	repoHandler := handler.NewRepositoryHandler(repoService, projectService)
-	requirementHandler := handler.NewRequirementHandler(reqService, projectService, notifier)
+	requirementHandler := handler.NewRequirementHandler(reqService, projectService, notifier, rdb)
 	codegenHandler := handler.NewCodegenHandler(codegenService, reqService, repoService, reviewService)
 	reviewHandler := handler.NewReviewHandler(reviewService)
 	dashboardHandler := handler.NewDashboardHandler(db)
 	feishuHandler := handler.NewFeishuHandler(docClient)
 	settingHandler := handler.NewSettingHandler(settingService)
+	openHandler := handler.NewOpenHandler(rdb, reqService, docClient)
 
 	// Gin engine
 	if cfg.Server.Mode == "release" {
@@ -175,6 +176,7 @@ func main() {
 		DashboardHandler:   dashboardHandler,
 		FeishuHandler:      feishuHandler,
 		SettingHandler:     settingHandler,
+		OpenHandler:        openHandler,
 	})
 
 	// Start server

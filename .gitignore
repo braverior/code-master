@@ -1,10 +1,6 @@
 build.sh
 version.sh
-work/.claude.json
-work/.claude/
-work/codegen/
-deploy/k8s/configmap.yaml
-deploy/k8s/deployment.yaml
-deploy/k8s/secret.yaml
+work
+deploy
 backend/config.yaml
 backend/dump.rdb
