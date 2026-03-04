@@ -175,6 +175,97 @@ REGISTRY=registry.example.com/team ./deploy.sh all
 
 用户可在「设置」页面配置个人的 LLM API Key 和 Git Token，按用户维度加密存储。
 
+## 飞书集成
+
+CodeMaster 深度集成飞书，提供 OAuth 登录、机器人交互、消息通知和文档抓取能力。
+
+### 创建飞书应用
+
+1. 登录 [飞书开放平台](https://open.feishu.cn/)，创建企业自建应用
+2. 获取 `App ID` 和 `App Secret`
+3. 添加以下能力与配置
+
+### 所需能力
+
+| 能力 | 用途 |
+|------|------|
+| **网页应用** | 配置 OAuth 重定向 URL，实现飞书账号登录 CodeMaster |
+| **机器人** | 在飞书中与 CodeMaster Bot 交互，接收通知推送 |
+
+### 所需权限
+
+| 权限标识 | 说明 | 用途 |
+|----------|------|------|
+| `im:message` | 获取与发送单聊、群组消息 | Bot 发送通知卡片 |
+| `im:message:send_as_bot` | 以应用的身份发送消息 | Bot 主动推送通知 |
+| `im:message.receive_v1` | 接收消息事件 | Bot 接收用户命令和聊天消息 |
+| `contact:user.id:readonly` | 获取用户 UserID | OAuth 登录时获取用户标识 |
+
+### 事件订阅
+
+- 订阅 `im.message.receive_v1`（接收消息）事件
+- 连接模式选择 **长连接（WebSocket）**，无需公网回调地址，适合内网部署
+
+### OAuth 登录
+
+用户通过飞书 OAuth 2.0 登录 CodeMaster，流程：
+
+```
+浏览器 → /auth/feishu/login → 飞书授权页 → 用户授权
+    → /auth/feishu/callback → 获取 user_access_token → 获取用户信息
+    → 创建/更新用户 → 签发 JWT → 跳转前端
+```
+
+首次登录自动创建用户，后续登录更新用户名和头像。用户的 `feishu_uid`（open_id）用于关联 Bot 消息推送。
+
+### 机器人能力
+
+**Bot 命令：**
+
+| 命令 | 说明 |
+|------|------|
+| `/help` | 显示命令列表 |
+| `/projects` | 我的项目列表 |
+| `/myreqs` | 我的所有需求 |
+| `/reqs <项目ID>` | 指定项目的需求列表 |
+| `/status <需求ID>` | 需求详细状态（含代码生成和 Review 信息） |
+| `/reviews` | 我的待审查列表 |
+| `/codegen <需求ID>` | 触发代码生成 |
+| `/clear` | 清除 AI 对话历史 |
+
+**通知推送：**
+
+| 事件 | 触发时机 | 通知对象 | 卡片颜色 |
+|------|----------|----------|----------|
+| 需求创建 | 创建需求并指派 | 被指派人 | 蓝色 |
+| 代码生成完成 | 生成任务成功 | 创建人 + 指派人 | 绿色 |
+| 代码生成失败 | 生成任务失败 | 创建人 + 指派人 | 红色 |
+| AI Review 完成 | AI 审查完成 | 创建人 + 指派人 | 按评分着色 |
+| 人工审查提交 | 人工提交审查 | 创建人 + 指派人 | 按结果着色 |
+
+**AI 聊天：** 发送非 `/` 开头的文本，Bot 转发到 OpenAI 兼容接口，支持多轮对话。
+
+### 飞书相关配置
+
+```yaml
+feishu:
+  app_id: "cli_xxx"                                          # 飞书应用 App ID
+  app_secret: "xxx"                                          # 飞书应用 App Secret
+  redirect_uri: "https://your-domain/api/v1/auth/feishu/callback"  # OAuth 回调地址
+  bot:
+    enabled: true              # 启用机器人（关闭则仅 OAuth 登录可用）
+    encrypt_key: ""            # 事件加密 Key（可选）
+    verification_token: ""     # 事件验证 Token（可选）
+
+ai_chat:                       # Bot AI 聊天（可选）
+  base_url: "https://api.openai.com/v1"
+  api_key: "sk-xxx"
+  model: "gpt-4"
+  max_history: 20
+```
+
+> 详细文档参见 [`docs/feishu-bot.md`](docs/feishu-bot.md)。
+
 ## Session Resume (会话恢复)
 
 每次代码生成时，系统会从 Claude Code 的 `system/init` 事件中捕获 `session_id` 并持久化到数据库。用户在二次生成时，可以勾选「恢复上次会话」，选择一个历史 session，Claude 将通过 `--resume <session_id>` 继续上一次的上下文。
