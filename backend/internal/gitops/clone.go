@@ -169,7 +169,6 @@ func checkGitHubPushPermission(repoFullName, token string) error {
 }
 
 // extractAPIBase extracts the scheme+host from a git URL.
-// e.g. "https://git.domob-inc.cn/group/repo.git" => "https://git.domob-inc.cn"
 func extractAPIBase(gitURL string) string {
 	u, err := url.Parse(gitURL)
 	if err != nil {

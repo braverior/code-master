@@ -55,7 +55,7 @@ COPY --from=golang:1.22-alpine /usr/local/go /usr/local/go
 ENV GOPATH=/root/go
 ENV PATH=$GOPATH/bin:/usr/local/go/bin:$PATH
 ENV GOPROXY=https://goproxy.cn,direct
-ENV GOPRIVATE=git.domob-inc.cn
+
 
 # Install Claude Code CLI
 RUN npm install -g @anthropic-ai/claude-code \
