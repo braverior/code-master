@@ -25,7 +25,7 @@ feishu:
     verification_token: ""
 
 ai_chat:
-  base_url: "https://bmc-llm-relay.bluemediagroup.cn/v1"
+  base_url: "https://api.openai.com/v1"
   api_key: "your-ai-chat-api-key"
   model: "gpt-5.2"
   max_history: 20
@@ -38,7 +38,7 @@ codegen:
   max_workers: 3
   max_turns: 50
   timeout_minutes: 10
-  work_dir: "/Users/huanglele/codes/code-master/work"
+  work_dir: "/Users/YOURNAME/codes/code-master/work"
   use_local_git: false  # true: 使用本地 git 凭证 push; false: 使用用户设置的 token push
   #use_local_git: true  # true: 使用本地 git 凭证 push; false: 使用用户设置的 token push
 
