@@ -13,7 +13,7 @@ import {
 } from '@/components/ui/popover';
 import { Settings, Eye, EyeOff, Save, ChevronsUpDown, Check } from 'lucide-react';
 
-const DEFAULT_BASE_URL = 'https://bmc-llm-relay.bluemediagroup.cn/v1';
+const DEFAULT_BASE_URL = 'https://api.anthropic.com/v1';
 
 const PRESET_MODELS = [
   { value: 'claude-sonnet-4-5-20250929', label: 'Claude Sonnet 4.5' },

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { codegenApi } from '@/api/codegen';
 import { requirementApi } from '@/api/requirement';
@@ -19,6 +19,8 @@ import {
   Info, AlertTriangle, AlertCircle, GitBranch, Cpu, Upload, ExternalLink,
   Search, FolderSearch, Wrench, ListTodo, ClipboardCheck, Users,
 } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import type { CodeGenTask, DiffFile, SSEOutputEvent, SSELogEvent, ProjectMember } from '@/types';
 
 const stageOrder = ['pending', 'cloning', 'running', 'completed'];
@@ -57,6 +59,18 @@ export function CodeGenPage() {
 
   // Always enable stream: for running tasks it's real-time; for completed/failed tasks it replays history from Redis
   const stream = useCodegenStream({ taskId });
+
+  // Extract the latest TodoWrite data from stream entries
+  const latestTodos = useMemo(() => {
+    for (let i = stream.entries.length - 1; i >= 0; i--) {
+      const entry = stream.entries[i];
+      if (entry.kind === 'output' && entry.data.type === 'tool_use' && entry.data.tool === 'TodoWrite') {
+        const input = entry.data.input as Record<string, unknown>;
+        return (input.todos || []) as Array<Record<string, unknown>>;
+      }
+    }
+    return null;
+  }, [stream.entries]);
 
   // Fetch task details
   useEffect(() => {
@@ -402,6 +416,35 @@ export function CodeGenPage() {
             </CardContent>
           </Card>
 
+          {/* Todo List */}
+          {latestTodos && latestTodos.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <ListTodo className="w-5 h-5" />
+                  任务列表
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {latestTodos.map((todo, i) => {
+                  const status = String(todo.status || 'pending');
+                  return (
+                    <div key={i} className="flex items-start gap-2 text-sm">
+                      <span className="mt-0.5 shrink-0">
+                        {status === 'completed' ? <CheckCircle className="w-4 h-4 text-green-500" /> :
+                         status === 'in_progress' ? <Loader2 className="w-4 h-4 text-primary animate-spin" /> :
+                         <Clock className="w-4 h-4 text-muted-foreground" />}
+                      </span>
+                      <span className={status === 'completed' ? 'line-through text-muted-foreground' : 'text-foreground'}>
+                        {String(todo.content || todo.activeForm || '')}
+                      </span>
+                    </div>
+                  );
+                })}
+              </CardContent>
+            </Card>
+          )}
+
           {/* Diff Stats */}
           {task.diff_stat && task.status === 'completed' && (
             <Card>
@@ -744,9 +787,41 @@ function OutputBlock({ output, prevTool }: { output: SSEOutputEvent; prevTool?: 
     const isLong = content.length > 500;
     return (
       <div>
-        <pre className={`whitespace-pre-wrap text-foreground text-sm ${isLong && collapsed ? 'max-h-32 overflow-hidden' : ''}`}>
-          {content}
-        </pre>
+        <div className={`text-foreground text-sm markdown-body ${isLong && collapsed ? 'max-h-32 overflow-hidden' : ''}`}>
+          <ReactMarkdown
+            remarkPlugins={[remarkGfm]}
+            components={{
+              h1: ({ children }) => <h1 className="text-lg font-bold mt-3 mb-1">{children}</h1>,
+              h2: ({ children }) => <h2 className="text-base font-bold mt-3 mb-1">{children}</h2>,
+              h3: ({ children }) => <h3 className="text-sm font-bold mt-2 mb-1">{children}</h3>,
+              p: ({ children }) => <p className="my-1 leading-relaxed">{children}</p>,
+              strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+              ul: ({ children }) => <ul className="list-disc list-inside my-1 space-y-0.5">{children}</ul>,
+              ol: ({ children }) => <ol className="list-decimal list-inside my-1 space-y-0.5">{children}</ol>,
+              li: ({ children }) => <li className="leading-relaxed">{children}</li>,
+              table: ({ children }) => (
+                <div className="overflow-x-auto my-2">
+                  <table className="min-w-full text-xs border border-border">{children}</table>
+                </div>
+              ),
+              thead: ({ children }) => <thead className="bg-muted">{children}</thead>,
+              th: ({ children }) => <th className="border border-border px-2 py-1 text-left font-semibold">{children}</th>,
+              td: ({ children }) => <td className="border border-border px-2 py-1">{children}</td>,
+              code: ({ className, children }) => {
+                const isBlock = className?.startsWith('language-');
+                return isBlock
+                  ? <code className={`${className} block bg-muted rounded p-2 my-1 text-xs overflow-x-auto whitespace-pre`}>{children}</code>
+                  : <code className="bg-muted rounded px-1 py-0.5 text-xs">{children}</code>;
+              },
+              pre: ({ children }) => <pre className="my-1">{children}</pre>,
+              blockquote: ({ children }) => <blockquote className="border-l-2 border-muted-foreground/30 pl-3 my-1 text-muted-foreground">{children}</blockquote>,
+              a: ({ href, children }) => <a href={href} className="text-primary hover:underline" target="_blank" rel="noopener noreferrer">{children}</a>,
+              hr: () => <hr className="my-2 border-border" />,
+            }}
+          >
+            {content}
+          </ReactMarkdown>
+        </div>
         {isLong && (
           <button onClick={() => setCollapsed(!collapsed)}
             className="text-xs text-primary hover:underline mt-1 cursor-pointer">
@@ -760,31 +835,15 @@ function OutputBlock({ output, prevTool }: { output: SSEOutputEvent; prevTool?: 
   if (output.type === 'tool_use') {
     const input = (output.input || {}) as Record<string, unknown>;
 
-    // TodoWrite: render as task checklist
+    // TodoWrite: simplified inline display (full list shown in sidebar card)
     if (output.tool === 'TodoWrite') {
-      const todos = (input.todos || []) as Array<Record<string, unknown>>;
-      if (todos.length === 0) return null;
       return (
-        <div className="rounded border border-muted p-2.5 space-y-1.5">
-          <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
-            <ListTodo className="w-3.5 h-3.5" />
-            任务列表
+        <div className="flex items-start gap-2 p-2 rounded bg-accent/50">
+          <span className="text-primary mt-0.5 shrink-0"><ListTodo className="w-3.5 h-3.5" /></span>
+          <div className="flex-1 min-w-0">
+            <span className="text-xs font-semibold text-primary">TodoWrite</span>
+            <p className="text-xs text-muted-foreground mt-0.5">更新任务列表</p>
           </div>
-          {todos.map((todo, i) => {
-            const status = String(todo.status || 'pending');
-            return (
-              <div key={i} className="flex items-start gap-2 text-xs">
-                <span className="mt-0.5 shrink-0">
-                  {status === 'completed' ? <CheckCircle className="w-3.5 h-3.5 text-green-500" /> :
-                   status === 'in_progress' ? <Loader2 className="w-3.5 h-3.5 text-primary animate-spin" /> :
-                   <Clock className="w-3.5 h-3.5 text-muted-foreground" />}
-                </span>
-                <span className={status === 'completed' ? 'line-through text-muted-foreground' : 'text-foreground'}>
-                  {String(todo.content || todo.activeForm || '')}
-                </span>
-              </div>
-            );
-          })}
         </div>
       );
     }

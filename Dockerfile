@@ -13,7 +13,6 @@ RUN npm run build
 
 # ---------- Stage 2: Build backend ----------
 FROM golang:1.22-alpine AS backend-builder
-RUN apk add --no-cache gcc musl-dev
 ENV GOPROXY=https://goproxy.cn,direct
 WORKDIR /build
 COPY backend/go.mod backend/go.sum ./
@@ -24,7 +23,10 @@ RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /app/server 
 # ---------- Stage 3: Runtime ----------
 FROM node:20-slim
 
-# Install runtime dependencies
+# Use China mirror for faster apt downloads
+RUN sed -i 's|deb.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list.d/debian.sources
+
+# Layer 1: System base tools (almost never changes)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     ca-certificates \
@@ -35,6 +37,25 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     bash-completion \
     && rm -rf /var/lib/apt/lists/*
+
+# Layer 2: Language runtimes via apt (change when adding/upgrading languages)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    default-jdk-headless \
+    php-cli \
+    php-common \
+    redis \
+    default-mysql-server \
+    default-mysql-client \
+    && rm -rf /var/lib/apt/lists/*
+
+# Go: copy from official image instead of apt-get (much faster, version 1.22 vs apt's 1.19)
+COPY --from=golang:1.22-alpine /usr/local/go /usr/local/go
+
+# Go environment
+ENV GOPATH=/root/go
+ENV PATH=$GOPATH/bin:/usr/local/go/bin:$PATH
+ENV GOPROXY=https://goproxy.cn,direct
+ENV GOPRIVATE=git.domob-inc.cn
 
 # Install Claude Code CLI
 RUN npm install -g @anthropic-ai/claude-code \

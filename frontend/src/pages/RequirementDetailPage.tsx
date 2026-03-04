@@ -20,12 +20,13 @@ import {
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { DeleteConfirmDialog } from '@/components/DeleteConfirmDialog';
 import {
   FileText, ArrowLeft, Edit3, Play, Clock, CheckCircle, XCircle,
   AlertCircle, ExternalLink, Trash2, ArrowRight, Plus, Loader2,
   ClipboardCheck, Users, GitCompare, GitBranch, Copy, Upload, AlertTriangle, RotateCcw, Settings,
-  Terminal, Share2,
+  Terminal, Share2, Monitor, Cloud,
 } from 'lucide-react';
 import type { Requirement, CodeGenTask, ProjectMember, Repository, DocLink, SessionInfo } from '@/types';
 
@@ -80,6 +81,7 @@ export function RequirementDetailPage() {
   const [repos, setRepos] = useState<Repository[]>([]);
   const [generateOpen, setGenerateOpen] = useState(false);
   const [generateLoading, setGenerateLoading] = useState(false);
+  const [generateMode, setGenerateMode] = useState<'server' | 'local'>('server');
   const [extraContext, setExtraContext] = useState('');
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
   const [resumeEnabled, setResumeEnabled] = useState(false);
@@ -785,71 +787,169 @@ export function RequirementDetailPage() {
 
       {/* Generate Dialog */}
       <Dialog open={generateOpen} onOpenChange={setGenerateOpen}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>生成代码</DialogTitle>
             <DialogDescription>AI 将根据需求描述自动生成代码</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            {settingsMissing && (
-              <div className="rounded-md border border-yellow-500/50 bg-yellow-500/5 p-3 flex items-start gap-2">
-                <AlertTriangle className="w-4 h-4 text-yellow-500 shrink-0 mt-0.5" />
-                <div className="flex-1 text-sm">
-                  <p className="font-medium text-yellow-500">请先完善个人设置</p>
-                  <p className="text-muted-foreground mt-0.5">
-                    {!settingsReady?.apiKey && '缺少 API Key'}
-                    {!settingsReady?.apiKey && !settingsReady?.gitToken && '、'}
-                    {!settingsReady?.gitToken && '缺少 Git Token'}
-                    ，无法启动代码生成。
-                  </p>
-                  <Button variant="link" size="sm" className="px-0 h-auto mt-1 text-yellow-500"
-                    onClick={() => navigate('/settings')}>
-                    <Settings className="w-3.5 h-3.5 mr-1" />前往设置页面
-                  </Button>
+          <Tabs value={generateMode} onValueChange={(v) => setGenerateMode(v as 'server' | 'local')} className="w-full">
+            <TabsList className="w-full">
+              <TabsTrigger value="server" className="flex-1"><Cloud className="w-4 h-4 mr-1.5" />服务器生成</TabsTrigger>
+              <TabsTrigger value="local" className="flex-1"><Monitor className="w-4 h-4 mr-1.5" />本地生成</TabsTrigger>
+            </TabsList>
+            <TabsContent value="server">
+              <div className="space-y-4 py-2">
+                {settingsMissing && (
+                  <div className="rounded-md border border-yellow-500/50 bg-yellow-500/5 p-3 flex items-start gap-2">
+                    <AlertTriangle className="w-4 h-4 text-yellow-500 shrink-0 mt-0.5" />
+                    <div className="flex-1 text-sm">
+                      <p className="font-medium text-yellow-500">请先完善个人设置</p>
+                      <p className="text-muted-foreground mt-0.5">
+                        {!settingsReady?.apiKey && '缺少 API Key'}
+                        {!settingsReady?.apiKey && !settingsReady?.gitToken && '、'}
+                        {!settingsReady?.gitToken && '缺少 Git Token'}
+                        ，无法启动代码生成。
+                      </p>
+                      <Button variant="link" size="sm" className="px-0 h-auto mt-1 text-yellow-500"
+                        onClick={() => navigate('/settings')}>
+                        <Settings className="w-3.5 h-3.5 mr-1" />前往设置页面
+                      </Button>
+                    </div>
+                  </div>
+                )}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">补充说明（可选）</label>
+                  <Textarea placeholder="给 AI 的额外上下文信息..." value={extraContext}
+                    onChange={(e) => setExtraContext(e.target.value)} rows={3} />
                 </div>
-              </div>
-            )}
-            <div className="space-y-2">
-              <label className="text-sm font-medium">补充说明（可选）</label>
-              <Textarea placeholder="给 AI 的额外上下文信息..." value={extraContext}
-                onChange={(e) => setExtraContext(e.target.value)} rows={3} />
-            </div>
-            {sessions.length > 0 && (
-              <div className="space-y-3 rounded-md border p-3">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" checked={resumeEnabled}
-                    onChange={(e) => setResumeEnabled(e.target.checked)}
-                    className="rounded border-gray-300" />
-                  <RotateCcw className="w-4 h-4 text-muted-foreground" />
-                  <span className="text-sm font-medium">恢复上次会话</span>
-                  <span className="text-xs text-muted-foreground">（Claude 将保留之前的上下文）</span>
-                </label>
-                {resumeEnabled && (
-                  <Select value={selectedSessionTaskId ? String(selectedSessionTaskId) : ''}
-                    onValueChange={(v) => setSelectedSessionTaskId(Number(v))}>
-                    <SelectTrigger className="h-9">
-                      <SelectValue placeholder="选择要恢复的会话" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {sessions.map((s) => (
-                        <SelectItem key={s.id} value={String(s.id)}>
-                          任务 #{s.id} · {s.status === 'completed' ? '已完成' : s.status === 'failed' ? '失败' : s.status}
-                          {s.claude_cost_usd ? ` · $${s.claude_cost_usd.toFixed(2)}` : ''}
-                          {' · '}{new Date(s.created_at).toLocaleString('zh-CN')}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                {sessions.length > 0 && (
+                  <div className="space-y-3 rounded-md border p-3">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input type="checkbox" checked={resumeEnabled}
+                        onChange={(e) => setResumeEnabled(e.target.checked)}
+                        className="rounded border-gray-300" />
+                      <RotateCcw className="w-4 h-4 text-muted-foreground" />
+                      <span className="text-sm font-medium">恢复上次会话</span>
+                      <span className="text-xs text-muted-foreground">（Claude 将保留之前的上下文）</span>
+                    </label>
+                    {resumeEnabled && (
+                      <Select value={selectedSessionTaskId ? String(selectedSessionTaskId) : ''}
+                        onValueChange={(v) => setSelectedSessionTaskId(Number(v))}>
+                        <SelectTrigger className="h-9">
+                          <SelectValue placeholder="选择要恢复的会话" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {sessions.map((s) => (
+                            <SelectItem key={s.id} value={String(s.id)}>
+                              任务 #{s.id} · {s.status === 'completed' ? '已完成' : s.status === 'failed' ? '失败' : s.status}
+                              {s.claude_cost_usd ? ` · $${s.claude_cost_usd.toFixed(2)}` : ''}
+                              {' · '}{new Date(s.created_at).toLocaleString('zh-CN')}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                  </div>
                 )}
               </div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setGenerateOpen(false)}>取消</Button>
-            <Button onClick={handleGenerate} disabled={generateLoading || !!settingsMissing}>
-              {generateLoading ? <><Spinner size="sm" className="mr-2" />启动中...</> : <><Play className="w-4 h-4 mr-1" />开始生成</>}
-            </Button>
-          </DialogFooter>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setGenerateOpen(false)}>取消</Button>
+                <Button onClick={handleGenerate} disabled={generateLoading || !!settingsMissing}>
+                  {generateLoading ? <><Spinner size="sm" className="mr-2" />启动中...</> : <><Play className="w-4 h-4 mr-1" />开始生成</>}
+                </Button>
+              </DialogFooter>
+            </TabsContent>
+            <TabsContent value="local">
+              <div className="space-y-4 py-2">
+                <p className="text-sm text-muted-foreground">
+                  生成提示词，复制后发送给 Claude Code 即可读取此需求并开始开发。
+                </p>
+                {/* Step 1: Pull branch */}
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Badge variant="secondary" className="shrink-0">步骤 1</Badge>
+                    <span className="text-sm font-medium">切换到需求分支</span>
+                  </div>
+                  <div className="space-y-1.5">
+                    <span className="text-xs text-muted-foreground">拉取远程分支（已存在时）</span>
+                    <div className="flex items-center gap-2">
+                      <code className="text-xs bg-muted px-2 py-1.5 rounded flex-1 break-all leading-relaxed">
+                        git fetch origin && git checkout -b code-master/req-{req.id} origin/code-master/req-{req.id}
+                      </code>
+                      <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0"
+                        onClick={() => copyToClipboard(`git fetch origin && git checkout -b code-master/req-${req.id} origin/code-master/req-${req.id}`)}>
+                        <Copy className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <span className="text-xs text-muted-foreground">新建本地分支（不存在时）</span>
+                    <div className="flex items-center gap-2">
+                      <code className="text-xs bg-muted px-2 py-1.5 rounded flex-1 break-all leading-relaxed">
+                        git checkout -b code-master/req-{req.id}
+                      </code>
+                      <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0"
+                        onClick={() => copyToClipboard(`git checkout -b code-master/req-${req.id}`)}>
+                        <Copy className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+                {/* Step 2: Generate prompt via share token */}
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Badge variant="secondary" className="shrink-0">步骤 2</Badge>
+                    <span className="text-sm font-medium">复制提示词到 Claude Code 执行</span>
+                  </div>
+                  {!shareToken ? (
+                    <Button variant="outline" size="sm" className="w-full" onClick={handleGenerateShareToken} disabled={shareTokenLoading}>
+                      {shareTokenLoading ? <><Spinner size="sm" className="mr-2" />生成中...</> : <><Share2 className="w-4 h-4 mr-1" />生成提示词</>}
+                    </Button>
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="flex items-start gap-2">
+                        <code className="text-xs bg-muted px-2 py-1.5 rounded flex-1 break-all leading-relaxed select-all whitespace-pre-wrap">
+                          请先用 curl 工具获取以下链接的需求内容，然后基于需求完成开发{'\n'}{window.location.origin}/api/v1/open/requirements/{req.id}?token={shareToken}
+                        </code>
+                        <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0 mt-0.5"
+                          onClick={() => copyToClipboard(
+                            `请先用 curl 工具获取以下链接的需求内容，然后基于需求完成开发\n${window.location.origin}/api/v1/open/requirements/${req.id}?token=${shareToken}`
+                          )}>
+                          <Copy className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground">
+                        Token 有效期 1 小时，过期时间：{new Date(shareTokenExpiresAt).toLocaleString('zh-CN')}
+                      </p>
+                      <Button variant="ghost" size="sm" className="w-full text-xs" onClick={handleGenerateShareToken} disabled={shareTokenLoading}>
+                        {shareTokenLoading ? '生成中...' : '重新生成'}
+                      </Button>
+                    </div>
+                  )}
+                </div>
+                {/* Step 3: Push */}
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Badge variant="secondary" className="shrink-0">步骤 3</Badge>
+                    <span className="text-sm font-medium">推送代码</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <code className="text-xs bg-muted px-2 py-1.5 rounded flex-1 break-all leading-relaxed">
+                      git add . && git commit -m "feat: req-{req.id}" && git push origin code-master/req-{req.id}
+                    </code>
+                    <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0"
+                      onClick={() => copyToClipboard(`git add . && git commit -m "feat: req-${req.id}" && git push origin code-master/req-${req.id}`)}>
+                      <Copy className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">推送后可使用「手动提交」按钮关联到需求</p>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setGenerateOpen(false)}>关闭</Button>
+              </DialogFooter>
+            </TabsContent>
+          </Tabs>
         </DialogContent>
       </Dialog>
 

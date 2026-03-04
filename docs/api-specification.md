@@ -1530,6 +1530,40 @@ Clone 仓库并使用 Claude Code 分析其结构、技术栈、模块功能。
 
 ---
 
+### 6.10 生成分享 Token
+
+**POST** `/requirements/:id/share-token`
+
+**权限:** 所有已登录用户
+
+生成一个短期有效的分享 Token，可用于公开 API 获取需求详情（无需登录认证）。用于 Claude Code 离线模式读取需求上下文。
+
+**请求:** 无请求体
+
+**响应:**
+```json
+{
+  "code": 0,
+  "data": {
+    "token": "a3f8b2c1d4e5f6a7b8c9d0e1",
+    "expires_at": "2026-03-03T15:00:00Z"
+  }
+}
+```
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| token | string | 24 位随机 hex 字符串 |
+| expires_at | string | 过期时间 (UTC)，固定 1 小时有效 |
+
+**错误响应:**
+
+| code | 场景 |
+|------|------|
+| 40404 | 需求不存在 |
+
+---
+
 ## 7. 代码生成 (CodeGen) -- 核心
 
 ### 7.1 触发代码生成
@@ -2585,7 +2619,80 @@ data: {"task_id":42,"status":"completed","review_id":10}
 
 ---
 
-## 12. 接口权限矩阵
+---
+
+## 12. 公开接口 (Open API)
+
+> 以下接口**不需要登录认证**，通过 query param `token` 进行验证。Token 由已登录用户通过 `POST /requirements/:id/share-token` 生成。
+
+### 12.1 获取需求详情
+
+**GET** `/open/requirements/:id?token=xxx`
+
+**认证:** 无需 Bearer Token，通过 query param `token` 验证
+
+获取需求的标题、描述和关联飞书文档正文。专为 Claude Code 离线模式设计，响应仅包含开发所需的核心信息。
+
+**Query 参数:**
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| token | string | 是 | 通过 `POST /requirements/:id/share-token` 生成的分享 Token |
+
+**Token 校验规则:**
+1. Token 必须存在且未过期（有效期 1 小时）
+2. Token 对应的 requirement_id 必须与 URL 中的 `:id` 匹配
+
+**后端行为:**
+1. 从 Redis 查找 Token 对应的 requirement_id
+2. 校验 Token 有效性及 ID 匹配
+3. 查询需求详情
+4. **实时**从飞书拉取所有关联文档的最新内容
+5. 返回精简数据（仅标题、描述、文档正文）
+
+**响应:**
+```json
+{
+  "code": 0,
+  "data": {
+    "title": "新增用户注册功能",
+    "description": "## 功能描述\n支持手机号+验证码注册...",
+    "doc_content": "### 注册流程 PRD\n\n文档正文内容..."
+  }
+}
+```
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| title | string | 需求标题 |
+| description | string | 需求详细描述 |
+| doc_content | string | 所有关联飞书文档的正文拼接，格式为 `### 文档标题\n\n正文`，多个文档以 `---` 分隔。无关联文档时为空字符串 |
+
+**错误响应:**
+
+| HTTP 状态码 | code | 场景 |
+|-------------|------|------|
+| 401 | 40101 | 缺少 token 参数 |
+| 401 | 40102 | Token 无效或已过期 |
+| 403 | 40301 | Token 与需求 ID 不匹配 |
+| 404 | 40404 | 需求不存在 |
+
+**使用示例:**
+```bash
+# 1. 先用已登录用户生成 Token
+curl -X POST https://example.com/api/v1/requirements/15/share-token \
+  -H "Authorization: Bearer <jwt>" \
+  -H "Content-Type: application/json"
+
+# 响应: {"code":0,"data":{"token":"a3f8b2c1d4e5f6a7b8c9d0e1","expires_at":"..."}}
+
+# 2. 用 Token 获取需求内容（无需登录）
+curl -s 'https://example.com/api/v1/open/requirements/15?token=a3f8b2c1d4e5f6a7b8c9d0e1'
+```
+
+---
+
+## 13. 接口权限矩阵
 
 > **权限模型说明:** 系统使用"业务角色 + 管理员"双轨模型:
 > - `role`: 业务角色，`pm` (产品经理) 或 `rd` (研发工程师)
@@ -2622,6 +2729,8 @@ data: {"task_id":42,"status":"completed","review_id":10}
 | 需求 | 编辑需求 | Creator | - | Y | draft/rejected 状态 |
 | 需求 | 删除需求 | Creator | - | Y | |
 | 需求 | 全局需求列表 | Y | Y | Y | |
+| 需求 | 生成分享 Token | Y | Y | Y | |
+| 公开 | 获取需求详情 | - | - | - | 无需登录，Token 验证 |
 | 代码生成 | 触发生成 | - | Assignee | Y | 需关联仓库+RD |
 | 代码生成 | 手动提交代码 | Y | Y | Y | 需关联仓库 |
 | 代码生成 | 查看进度/详情 | Member | Member | Y | |
